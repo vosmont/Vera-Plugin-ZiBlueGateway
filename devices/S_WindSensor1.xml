@@ -1,0 +1,66 @@
+<?xml version="1.0"?>
+<scpd xmlns="urn:schemas-upnp-org:service-1-0">
+  <specVersion>
+    <major>1</major>
+    <minor>0</minor>
+  </specVersion>
+  <serviceStateTable>
+
+    <stateVariable>
+      
+      <name>Direction</name><sendEventsAttribute>yes</sendEventsAttribute>
+      <dataType>string</dataType>
+      <shortCode>direction</shortCode>
+    </stateVariable>
+    
+	<stateVariable>
+       
+       <name>GustSpeed</name>
+       <sendEventsAttribute>yes</sendEventsAttribute><dataType>r8</dataType>
+	   <shortCode>gust</shortCode>
+    </stateVariable>
+	
+  <stateVariable>
+       
+       <name>AvgSpeed</name><sendEventsAttribute>yes</sendEventsAttribute>
+       <dataType>r8</dataType>
+	   <shortCode>speed</shortCode>
+    </stateVariable>
+		
+  </serviceStateTable>
+  <actionList>
+    <action>
+      <name>GetDirection</name>
+      <argumentList>
+        <argument>
+          <name>DirectionValue</name>
+          <direction>out</direction>
+          <relatedStateVariable>Direction</relatedStateVariable>
+        </argument>
+      </argumentList>
+    </action>
+    <action>
+      <name>GetGustSpeed</name>
+      <argumentList>
+        <argument>
+          <name>SpeedValue</name>
+          <direction>out</direction>
+          <relatedStateVariable>GustSpeed</relatedStateVariable>
+        </argument>
+      </argumentList>
+    </action>
+    <action>
+      <name>GetAverageSpeed</name>
+      <argumentList>
+        <argument>
+          <name>SpeedValue</name>
+          <direction>out</direction>
+          <relatedStateVariable>AvgSpeed</relatedStateVariable>
+        </argument>
+      </argumentList>
+    </action>
+	
+  </actionList>
+</scpd>
+ 
+ 

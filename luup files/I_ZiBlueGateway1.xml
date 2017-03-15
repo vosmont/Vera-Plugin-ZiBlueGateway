@@ -1,0 +1,122 @@
+<?xml version="1.0"?>
+<implementation>
+	<functions>
+		-- Sometimes the 'incoming' function is executed before the 'startup'
+		-- function has run, and therefore, before the plugin initialization.
+		-- Most of the time this happens when the protocol is 'raw',
+		-- which this plugin uses.
+		local fc = 0 -- failure counter
+		local plugin
+
+		function ziblue_gateway_startup (lul_device)
+			luup.log("ZiBlue Gateway startup")
+			--package.loaded.L_ZiBlueGateway1 = nil
+			plugin = require("L_ZiBlueGateway1")
+			return plugin.init(lul_device)
+		end
+	</functions>
+	<startup>ziblue_gateway_startup</startup>
+	<incoming>
+		<lua>
+			-- If the 'startup' function hasn't run yet,
+			-- 'plugin' and 'handleIncoming' are not defined.
+			if ( not plugin or not plugin.handleIncoming ) then
+				fc = fc + 1
+				luup.log( "(ZiBlueGateway::incoming) fc=" .. tostring(  fc) )
+			else
+				plugin.handleIncoming( lul_data )
+			end
+		</lua>
+	</incoming>
+	<actionList>
+		<!-- Security Sensor -->
+		<action>
+			<serviceId>urn:micasaverde-com:serviceId:SecuritySensor1</serviceId>
+			<name>SetArmed</name>
+			<job>
+				return plugin.Childs.setArmed( lul_device, lul_settings.newArmedValue )
+			</job>
+		</action>
+		<!-- SwitchPower -->
+		<action>
+			<serviceId>urn:upnp-org:serviceId:SwitchPower1</serviceId>
+			<name>SetTarget</name>
+			<job>
+				return plugin.Childs.setTarget( lul_device, lul_settings.newTargetValue )
+			</job>
+		</action>
+		<!-- Dimming -->
+		<action>
+			<serviceId>urn:upnp-org:serviceId:Dimming1</serviceId>
+			<name>SetLoadLevelTarget</name>
+			<job>
+				return plugin.Childs.setLoadLevelTarget( lul_device, lul_settings.newLoadlevelTarget )
+			</job>
+		</action>
+		<!-- WindowCovering -->
+		<action>
+			<serviceId>urn:upnp-org:serviceId:WindowCovering1</serviceId>
+			<name>Up</name>
+			<job>
+				return plugin.Childs.moveShutter( lul_device, "up" )
+			</job>
+		</action>
+		<action>
+			<serviceId>urn:upnp-org:serviceId:WindowCovering1</serviceId>
+			<name>Down</name>
+			<job>
+				return plugin.Childs.moveShutter( lul_device, "down" )
+			</job>
+		</action>
+		<action>
+			<serviceId>urn:upnp-org:serviceId:WindowCovering1</serviceId>
+			<name>Stop</name>
+			<job>
+				return plugin.Childs.moveShutter( lul_device, "stop" )
+			</job>
+		</action>
+		<!-- ZiBlue gateway -->
+		<action>
+			<serviceId>urn:upnp-org:serviceId:ZiBlueGateway1</serviceId>
+			<name>SendMessage</name>
+			<job>
+				return plugin.sendMessage( lul_settings.message )
+			</job>
+		</action>
+		<action>
+			<serviceId>urn:upnp-org:serviceId:ZiBlueGateway1</serviceId>
+			<name>Refresh</name>
+			<job>
+				return plugin.refresh()
+			</job>
+		</action>
+		<action>
+			<serviceId>urn:upnp-org:serviceId:ZiBlueGateway1</serviceId>
+			<name>CreateDevices</name>
+			<job>
+				return plugin.createDevices( lul_settings.productIds )
+			</job>
+		</action>
+		<action>
+			<serviceId>urn:upnp-org:serviceId:ZiBlueGateway1</serviceId>
+			<name>TeachIn</name>
+			<run>
+				return plugin.teachIn( lul_settings.productId, lul_settings.action, lul_settings.comment )
+			</run>
+		</action>
+		<action>
+			<serviceId>urn:upnp-org:serviceId:ZiBlueGateway1</serviceId>
+			<name>Associate</name>
+			<run>
+				return plugin.associate( lul_settings.productId, lul_settings.feature, lul_settings.association )
+			</run>
+		</action>
+		<action>
+			<serviceId>urn:upnp-org:serviceId:ZiBlueGateway1</serviceId>
+			<name>SetTarget</name>
+			<job>
+				return plugin.setTarget( lul_settings.productId, lul_settings.newTargetValue )
+			</job>
+		</action>
+	</actionList>
+</implementation>

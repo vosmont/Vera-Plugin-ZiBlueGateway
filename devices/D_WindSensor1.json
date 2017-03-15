@@ -1,0 +1,349 @@
+{
+    "flashicon": "icons\/generic_sensor.swf",
+    "default_icon": "..\/generic_default.png",
+    "imgIconBody": "",
+    "imgIconDimmable": "",
+    "imgIconTurnable": "",
+    "imgIconMin": "",
+    "imgIconMax": "",
+    "halloIconsDir": "pics/hallo",
+    "inScene": "0",
+    "DisplayStatus": {},
+    "doc_url": {
+        "doc_language": 1,
+        "doc_manual": 1,
+        "doc_version": 1,
+        "doc_platform": 0,
+        "doc_page": "sensors" 
+    },
+
+  "Tabs": [
+    {
+      "Label": {
+        "lang_tag": "tabname_control",
+        "text": "Information"
+      },
+      "Position": "0",
+      "TabType": "flash",
+      "SceneGroup": [
+                {
+                    "id": "1",
+                    "top": "0.75",
+                    "left": "0",
+                    "x": "2",
+                    "y": "1"
+                },
+                {
+                    "id": "2",
+                    "top": "1.75",
+                    "left": "0",
+                    "x": "2",
+                    "y": "1"
+                },
+                {
+                    "id": "3",
+                    "top": "2.75",
+                    "left": "0",
+                    "x": "2",
+                    "y": "1"
+                }
+      ],
+      "ControlGroup":[
+        {
+            "id":"1",
+            "scenegroup": "1",
+            "type": "info"
+        },
+        {
+            "id":"2",
+            "scenegroup": "2",
+            "type": "info"
+        },
+        {
+            "id":"3",
+            "scenegroup": "3",
+            "type": "info"
+        }
+      ],
+      "Control": [
+			{
+                    "ControlGroup": "1",
+                    "ControlPair": "1",
+                    "ControlHeader": "1",
+                    "top": "0",
+                    "left": "0",
+                    "x": "1.25",
+                    "ControlType": "label",
+                    "Label": {
+                        "lang_tag": "direction",
+                        "text": "Direction:"
+                    },
+                    "Display": {
+                        "Top": 30,
+                        "Left": 50,
+                        "Width": 75,
+                        "Height": 20
+                    }
+                },
+                {
+                    "ControlGroup": "1",
+                    "ControlPair": "1",
+                    "ControlHeader": "1",
+                    "top": "0",
+                    "left": "1.25",
+                    "x": "0.75",
+                    "ControlType": "variable",
+                    "Display": {
+                        "Service": "urn:upnp-org:serviceId:WindSensor1",
+                        "Variable": "Direction",
+                        "Top": 30,
+                        "Left": 150,
+                        "Width": 25,
+                        "Height": 20
+                    }
+                },
+                {
+                    "ControlGroup": "2",
+                    "ControlPair": "2",
+                    "ControlHeader": "1",
+                    "top": "0",
+                    "left": "0",
+                    "x": "1.25",
+                    "ControlType": "label",
+                    "Label": {
+                        "lang_tag": "gust",
+                        "text": "Wind gust:"
+                    },
+                    "Display": {
+                        "Top": 55,
+                        "Left": 50,
+                        "Width": 75,
+                        "Height": 20
+                    }
+                },
+                {
+                    "ControlGroup": "2",
+                    "ControlPair": "2",
+                    "ControlHeader": "1",
+                    "top": "0",
+                    "left": "1.25",
+                    "x": "0.75",
+                    "ControlType": "variable",
+                    "Display": {
+                        "Service": "urn:upnp-org:serviceId:WindSensor1",
+                        "Variable": "GustSpeed",
+                        "Top": 55,
+                        "Left": 150,
+                        "Width": 25,
+                        "Height": 20
+                    }
+                },
+                {
+                    "ControlGroup": "3",
+                    "ControlPair": "3",
+                    "ControlHeader": "1",
+                    "top": "0",
+                    "left": "0",
+                    "x": "1.25",
+                    "ControlType": "label",
+                    "Label": {
+                        "lang_tag": "average_speed",
+                        "text": "Avg speed:"
+                    },
+                    "Display": {
+                        "Top": 80,
+                        "Left": 50,
+                        "Width": 75,
+                        "Height": 20
+                    }
+                },
+                {
+                    "ControlGroup": "3",
+                    "ControlPair": "3",
+                    "ControlHeader": "1",
+                    "top": "0",
+                    "left": "1.25",
+                    "x": "0.75",
+                    "ControlType": "variable",
+                    "Display": {
+                        "Service": "urn:upnp-org:serviceId:WindSensor1",
+                        "Variable": "AvgSpeed",
+                        "Top": 80,
+                        "Left": 150,
+                        "Width": 25,
+                        "Height": 20
+                    }
+                }
+      ]
+    },
+    {
+      "Label": {
+        "lang_tag": "advanced",
+        "text": "Advanced"
+      },
+      "Position": "1",
+      "TabType": "javascript",
+      "ScriptName": "shared.js",
+      "Function": "advanced_device"
+    },
+        {
+            "Label": {
+                "lang_tag": "logs",
+                "text": "Logs"
+            },
+            "Position": "2",
+            "TabType": "javascript",
+            "ScriptName": "shared.js",
+            "Function": "device_logs"
+        },
+        {
+            "Label": {
+                "lang_tag": "notifications",
+                "text": "Notifications"
+            },
+            "Position": "3",
+            "TabType": "javascript",
+            "ScriptName": "shared.js",
+            "Function": "device_notifications"
+        }
+  ],
+    "eventList2": [
+        {
+            "id": 1,
+            "label": {
+                "lang_tag": "avg_speed_goes_above",
+                "text": "Average speed goes above"
+            },
+            "serviceId": "urn:upnp-org:serviceId:WindSensor1",
+            "norepeat": "1",
+            "argumentList": [
+                {
+                    "id": 1,
+                    "dataType": "r8",
+                    "name": "AvgSpeed",
+                    "comparisson": ">",
+                    "prefix": {
+                        "lang_tag": "average_speed",
+                        "text": "Average speed"
+                    },
+                    "suffix": {
+                    },
+                    "HumanFriendlyText": {
+                        "lang_tag": "hft_avg_speed_goes_above",
+                        "text": "Average speed for _DEVICE_NAME_ goes above _ARGUMENT_VALUE_"
+                    }
+                }
+            ]
+        },
+        {
+            "id": 2,
+            "label": {
+                "lang_tag": "avg_speed_goes_below",
+                "text": "Average speed goes below"
+            },
+            "serviceId": "urn:upnp-org:serviceId:WindSensor1",
+            "norepeat": "1",
+            "argumentList": [
+                {
+                    "id": 1,
+                    "dataType": "r8",
+                    "name": "AvgSpeed",
+                    "comparisson": "<",
+                    "prefix": {
+                        "lang_tag": "average_speed",
+                        "text": "Average speed"
+                    },
+                    "suffix": {
+                    },
+                    "HumanFriendlyText": {
+                        "lang_tag": "hft_avg_speed_goes_below",
+                        "text": "Average speed for _DEVICE_NAME_ goes below _ARGUMENT_VALUE_"
+                    }
+                }
+            ]
+        },
+        {
+            "id": 3,
+            "label": {
+                "lang_tag": "wind_gust_goes_above",
+                "text": "Wind gust goes above"
+            },
+            "serviceId": "urn:upnp-org:serviceId:WindSensor1",
+            "norepeat": "1",
+            "argumentList": [
+                {
+                    "id": 1,
+                    "dataType": "r8",
+                    "name": "GustSpeed",
+                    "comparisson": ">",
+                    "prefix": {
+                        "lang_tag": "gust",
+                        "text": "Wind gust"
+                    },
+                    "suffix": {
+                    },
+                    "HumanFriendlyText": {
+                        "lang_tag": "hft_wind_gust_goes_above",
+                        "text": "Wind gust for _DEVICE_NAME_ goes above _ARGUMENT_VALUE_"
+                    }
+                }
+            ]
+        },
+        {
+            "id": 4,
+            "label": {
+                "lang_tag": "wind_gust_goes_below",
+                "text": "Wind gust goes below"
+            },
+            "serviceId": "urn:upnp-org:serviceId:WindSensor1",
+            "norepeat": "1",
+            "argumentList": [
+                {
+                    "id": 1,
+                    "dataType": "r8",
+                    "name": "GustSpeed",
+                    "comparisson": "<",
+                    "prefix": {
+                        "lang_tag": "gust",
+                        "text": "Wind gust"
+                    },
+                    "suffix": {
+                    },
+                    "HumanFriendlyText": {
+                        "lang_tag": "hft_wind_gust_goes_below",
+                        "text": "Wind gust for _DEVICE_NAME_ goes below _ARGUMENT_VALUE_"
+                    }
+                }
+            ]
+        },
+        {
+            "id": 5,
+            "label": {
+                "lang_tag": "battery_level_goes_below",
+                "text": "Battery level goes below"
+            },
+            "serviceId": "urn:micasaverde-com:serviceId:HaDevice1",
+            "argumentList": [
+                {
+                    "id": 1,
+                    "prefix": {
+                        "lang_tag": "Level",
+                        "text": "Level"
+                    },
+                    "dataType": "i4",
+                    "name": "BatteryLevel",
+                    "comparisson": "<",
+                    "suffix": {
+                        "lang_tag": "percent_sign",
+                        "text": "%"
+                    },
+                    "HumanFriendlyText": {
+                        "lang_tag": "hft_battery_level_goes_below",
+                        "text": "Battery level for _DEVICE_NAME_ go below _ARGUMENT_VALUE_%"
+                    }
+                }
+            ]
+        }
+    ],
+  "DeviceType": "urn:schemas-micasaverde-com:device:WindSensor:1"
+}
