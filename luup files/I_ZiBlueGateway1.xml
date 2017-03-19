@@ -34,7 +34,7 @@
 			<serviceId>urn:micasaverde-com:serviceId:SecuritySensor1</serviceId>
 			<name>SetArmed</name>
 			<job>
-				return plugin.Childs.setArmed( lul_device, lul_settings.newArmedValue )
+				return plugin.Child.setArmed( lul_device, lul_settings.newArmedValue )
 			</job>
 		</action>
 		<!-- SwitchPower -->
@@ -42,7 +42,7 @@
 			<serviceId>urn:upnp-org:serviceId:SwitchPower1</serviceId>
 			<name>SetTarget</name>
 			<job>
-				return plugin.Childs.setTarget( lul_device, lul_settings.newTargetValue )
+				return plugin.Child.setTarget( lul_device, lul_settings.newTargetValue )
 			</job>
 		</action>
 		<!-- Dimming -->
@@ -50,7 +50,7 @@
 			<serviceId>urn:upnp-org:serviceId:Dimming1</serviceId>
 			<name>SetLoadLevelTarget</name>
 			<job>
-				return plugin.Childs.setLoadLevelTarget( lul_device, lul_settings.newLoadlevelTarget )
+				return plugin.Child.setLoadLevelTarget( lul_device, lul_settings.newLoadlevelTarget )
 			</job>
 		</action>
 		<!-- WindowCovering -->
@@ -58,21 +58,21 @@
 			<serviceId>urn:upnp-org:serviceId:WindowCovering1</serviceId>
 			<name>Up</name>
 			<job>
-				return plugin.Childs.moveShutter( lul_device, "up" )
+				return plugin.Child.moveShutter( lul_device, "up" )
 			</job>
 		</action>
 		<action>
 			<serviceId>urn:upnp-org:serviceId:WindowCovering1</serviceId>
 			<name>Down</name>
 			<job>
-				return plugin.Childs.moveShutter( lul_device, "down" )
+				return plugin.Child.moveShutter( lul_device, "down" )
 			</job>
 		</action>
 		<action>
 			<serviceId>urn:upnp-org:serviceId:WindowCovering1</serviceId>
 			<name>Stop</name>
 			<job>
-				return plugin.Childs.moveShutter( lul_device, "stop" )
+				return plugin.Child.moveShutter( lul_device, "stop" )
 			</job>
 		</action>
 		<!-- ZiBlue gateway -->

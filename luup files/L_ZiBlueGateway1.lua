@@ -17,7 +17,7 @@ local status, json = pcall( require, "dkjson" )
 
 _NAME = "ZiBlueGateway"
 _DESCRIPTION = "ZiBlue gateway for the Vera"
-_VERSION = "0.3"
+_VERSION = "0.4"
 _AUTHOR = "vosmont"
 
 
@@ -209,17 +209,25 @@ local DEVICE = {
 		parameters = { { "SWITCH_POWER", "0" } },
 		commands = {
 			[ "ON" ] = function( ziBlueDevice, feature )
-				DeviceHelper.setStatus( ziBlueDevice, feature, "1" )
+				DeviceHelper.setStatus( ziBlueDevice, feature, "1", nil, true )
 			end,
 			[ "OFF" ] = function( ziBlueDevice, feature )
-				DeviceHelper.setStatus( ziBlueDevice, feature, "0" )
+				DeviceHelper.setStatus( ziBlueDevice, feature, "0", nil, true )
 			end
 		}
 	},
 	DIMMABLE_LIGHT = {
 		name = "ui7_device_type_dimmable_light",
 		type = "urn:schemas-upnp-org:device:DimmableLight:1", file = "D_DimmableLight1.xml",
-		parameters = { { "SWITCH_POWER", "0" }, { "DIMMER_LEVEL", "0" } }
+		parameters = { { "SWITCH_POWER", "0" }, { "DIMMER_LEVEL", "0" } },
+		commands = {
+			[ "ON" ] = function( ziBlueDevice, feature )
+				DeviceHelper.setStatus( ziBlueDevice, feature, "1", nil, true )
+			end,
+			[ "OFF" ] = function( ziBlueDevice, feature )
+				DeviceHelper.setStatus( ziBlueDevice, feature, "0", nil, true )
+			end
+		}
 	},
 	TEMPERATURE_SENSOR = {
 		name = "ui7_device_type_temperature_sensor",
@@ -254,7 +262,12 @@ local DEVICE = {
 			end
 		}
 	},
-	WINDOW_COVERING = {
+	SHUTTER = {
+		name = "ui7_device_type_window_covering",
+		type = "urn:schemas-micasaverde-com:device:WindowCovering:1", file = "D_WindowCovering1.xml",
+		parameters = { { "DIMMER_LEVEL", "0" } }
+	},
+	PORTAL  = { -- TODO
 		name = "ui7_device_type_window_covering",
 		type = "urn:schemas-micasaverde-com:device:WindowCovering:1", file = "D_WindowCovering1.xml",
 		parameters = { { "DIMMER_LEVEL", "0" } }
@@ -318,10 +331,10 @@ local ZIBLUE_INFOS = {
 		{ features = { ["button/command"] = {}, ["state"] = {} }, deviceTypes = { "BINARY_LIGHT" }, settings = { "button", "pulse" } }
 	},
 	[ "3;0" ] = { -- RTS shutter
-		{ features = { ["state"] = {} }, deviceTypes = { "WINDOW_COVERING" } }
+		{ features = { ["state"] = {} }, deviceTypes = { "SHUTTER" } }
 	},
 	[ "3;1" ] = { -- RTS portal
-		{ features = { ["state"] = {} }, deviceTypes = { "WINDOW_COVERING" } }
+		{ features = { ["state"] = {} }, deviceTypes = { "PORTAL" } }
 	},
 	[ "4" ] = { -- Scientific Oregon
 		{ features = { ["temperature"] = {} }, deviceTypes = { "TEMPERATURE_SENSOR" } },
@@ -358,18 +371,9 @@ local ZIBLUE_INFOS = {
 
 
 local ZIBLUE_SEND_PROTOCOL = {
-	VISONIC433 = {
-		name = "Visonic 433Mhz",
-		deviceTypes = { "BINARY_LIGHT" }
-	},
-	VISONIC868 = {
-		name = "Visonic 868Mhz",
-		deviceTypes = { "BINARY_LIGHT" }
-	},
-	CHACON = {
-		name = "Chacon 433Mhz",
-		deviceTypes = { "BINARY_LIGHT" }
-	},
+	VISONIC433 = { name = "Visonic 433Mhz" },
+	VISONIC868 = { name = "Visonic 868Mhz" },
+	CHACON = { name = "Chacon 433Mhz" },
 	DOMIA = { name = "Domia 433Mhz" },
 	X10 = { name = "Visonic 433Mhz" },
 	X2D433 = { name = "X2D 433Mhz" },
@@ -379,13 +383,12 @@ local ZIBLUE_SEND_PROTOCOL = {
 	X2DGAS = { name = "X2D Gaz 868Mhz" },
 	RTS = {
 		name = "Somfy RTS 433Mhz",
+		deviceTypes = { "BINARY_LIGHT", "SHUTTER;qualifier=0", "PORTAL;qualifier=1" },
 		settings = {
 			{ variable = "qualifier", name = "Qualifier", type = "string" }
 		}
 	},
-	BLYSS = {
-		name = "Blyss 433Mhz"
-	},
+	BLYSS = { name = "Blyss 433Mhz" },
 	PARROT = {
 		name = "* ZiBlue Parrot",
 		--deviceTypes = { "BINARY_LIGHT", "DOOR_SENSOR", "MOTION_SENSOR", "SMOKE_SENSOR" },
@@ -888,6 +891,9 @@ DeviceHelper = {
 		local deviceId = feature.deviceId
 		local formerStatus = Variable.get( deviceId, VARIABLE.SWITCH_POWER ) or "0"
 		local msg = "ZiBlue device '" .. _getZiBlueId( ziBlueDevice, feature ) .. "'"
+		if ( feature.isReceiver ) then
+			msg = msg .. " (receiver)"
+		end
 		-- Pulse
 		--local isPulse = ( Variable.get( deviceId, VARIABLE.PULSE_MODE ) == "1" )
 		local isPulse = table_contains( feature.settings, "pulse" )
@@ -949,7 +955,8 @@ DeviceHelper = {
 		end
 
 		-- Send command if needed
-		if ( ( ziBlueDevice.isReceiver ) and not ( noAction == true ) ) then
+		debug( "isReceiver: " .. tostring(feature.isReceiver) .. ", noAction: " .. tostring(noAction), "DeviceHelper.setStatus" )
+		if ( ( feature.isReceiver ) and not ( noAction == true ) ) then
 			local cmd
 			if ( status == "1" ) then
 				cmd = "ON"
@@ -957,9 +964,9 @@ DeviceHelper = {
 				cmd = "OFF"
 			end
 			if loadLevel then 
-			    Network.send( "ZIA++DIM ID " .. ziBlueDevice.id .. " " .. ziBlueDevice.sendProtocol .. " %" .. tostring(loadLevel) )
+				Network.send( "ZIA++DIM ID " .. ziBlueDevice.protocolDeviceId .. " " .. ziBlueDevice.protocol .. " %" .. tostring(loadLevel) )
 			else
-			    Network.send( "ZIA++" .. cmd .. " ID " .. ziBlueDevice.id .. " " .. ziBlueDevice.sendProtocol )
+				Network.send( "ZIA++" .. cmd .. " ID " .. ziBlueDevice.protocolDeviceId .. " " .. ziBlueDevice.protocol )
 			end
 		end
 
@@ -1046,11 +1053,11 @@ DeviceHelper = {
 		end
 
 		-- Send command if needed
-		if ( ( ziBlueDevice.isReceiver ) and not ( noAction == true ) ) then
+		if ( ( feature.isReceiver ) and not ( noAction == true ) ) then
 			if ( loadLevel > 0 ) then
-				Network.send( "ZIA++DIM ID " .. ziBlueDevice.id .. " " .. ziBlueDevice.sendProtocol .. " %" .. tostring(loadLevel) )
+				Network.send( "ZIA++DIM ID " .. ziBlueDevice.protocolDeviceId .. " " .. ziBlueDevice.protocol .. " %" .. tostring(loadLevel) )
 			else
-				Network.send( "ZIA++OFF ID " .. ziBlueDevice.id .. " " .. ziBlueDevice.sendProtocol )
+				Network.send( "ZIA++OFF ID " .. ziBlueDevice.protocolDeviceId .. " " .. ziBlueDevice.protocol )
 			end
 		end
 
@@ -1176,7 +1183,7 @@ DeviceHelper = {
 
 	-- Manage roller shutter
 	moveShutter = function( ziBlueDevice, feature, direction, noAction )
-		debug("Shutter #" .. tostring(feature.deviceId) .. " direction: " .. tostring(direction), "DeviceHelper.moveShutter")
+		debug( "Shutter #" .. tostring(feature.deviceId) .. " direction: " .. tostring(direction), "DeviceHelper.moveShutter" )
 		
 		debug("TODO");
 	end
@@ -1777,6 +1784,10 @@ ZiBlueDevices = {
 							else
 								table.insert( g_indexZiBlueDevicesByDeviceId[ tostring( deviceId ) ][2], feature )
 							end
+							-- Receiver
+							if table_contains( settings, "receiver" ) then
+								feature.isReceiver = true
+							end
 						end
 						debug( "Found device #" .. tostring(deviceId) .. "(" .. feature.deviceName .. "), protocol " .. protocol .. ", id " .. protocolDeviceId .. ", feature " .. featureName, "ZiBlueDevices.retrieve" )
 					end
@@ -2147,7 +2158,11 @@ function createDevices( productIds )
 				local deviceTypeInfos = _getDeviceTypeInfos( deviceTypeName )
 				local parameters = _getEncodedParameters( deviceTypeInfos )
 				parameters = parameters .. VARIABLE.FEATURE[1] .. "," .. VARIABLE.FEATURE[2] .. "=state\n"
-				parameters = parameters .. VARIABLE.SETTING[1] .. "," .. VARIABLE.SETTING[2] .. "=receiver\n"
+				if ( protocol == "PARROT" ) then
+					parameters = parameters .. VARIABLE.SETTING[1] .. "," .. VARIABLE.SETTING[2] .. "=receiver,button\n"
+				else
+					parameters = parameters .. VARIABLE.SETTING[1] .. "," .. VARIABLE.SETTING[2] .. "=receiver\n"
+				end
 				if ( not deviceName or deviceName == "" ) then
 					deviceName = protocol .. " " .. protocolDeviceId
 				end
@@ -2210,14 +2225,14 @@ function associate( productId, featureName, strAssociation )
 end
 
 function setTarget( productId, newTargetValue )
-	local protocol, protocolDeviceId = unpack( string_split( productId, ";" ) )
+	local protocol, protocolDeviceId, qualifier = unpack( string_split( productId, ";" ) )
 	if ( ( protocol == nil ) or ( protocolDeviceId == nil ) ) then
 		error( "Protocol and device id are mandatory", "setTarget" )
 		return JOB_STATUS.ERROR
 	end
 	local cmd = ( newTargetValue == "1" ) and "ON" or "OFF"
 	debug("Set " .. cmd .. " " .. productId, "setTarget")
-	Network.send( "ZIA++" .. cmd .. " ID " .. tostring(protocolDeviceId) .. " " .. tostring(protocol) )
+	Network.send( "ZIA++" .. cmd .. " ID " .. tostring(protocolDeviceId) .. " " .. tostring(protocol) .. ( qualifier and ( " QUALIFIER " .. tostring(qualifier) ) or "" ) )
 	return JOB_STATUS.DONE
 end
 
