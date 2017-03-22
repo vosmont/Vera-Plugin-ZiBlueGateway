@@ -17,7 +17,7 @@ local status, json = pcall( require, "dkjson" )
 
 _NAME = "ZiBlueGateway"
 _DESCRIPTION = "ZiBlue gateway for the Vera"
-_VERSION = "0.4"
+_VERSION = "0.5"
 _AUTHOR = "vosmont"
 
 
@@ -399,30 +399,6 @@ local ZIBLUE_SEND_PROTOCOL = {
 	},
 	KD101 = { name = "KD101 433Mhz" }
 }
-
-local ZIBLUE_RECEIVED_PROTOCOL = {
-	UNDEFINED = 0,
-	X10     = 1,
-	VISONIC = 2,
-	BLYSS   = 3,
-	CHACON  = 4,
-	OREGON  = 5,
-	DOMIA   = 6,
-	OWL     = 7,
-	X2D     = 8,
-	RTS     = 9,
-	KD101   = 10,
-	PARROT  = 11
-}
-local function _getZiBlueReceivedProtocolName( protocolId )
-	protocolId = tonumber( protocolId )
-	for protocolName, id in pairs( ZIBLUE_RECEIVED_PROTOCOL ) do
-		if ( id == protocolId ) then
-			return protocolName
-		end
-	end
-	return "UNKNOW(" .. tostring( protocolId ) .. ")"
-end
 
 local ZIBLUE_DATA_FLAG = {
     [ "-1" ] = "",
@@ -891,15 +867,14 @@ DeviceHelper = {
 		local deviceId = feature.deviceId
 		local formerStatus = Variable.get( deviceId, VARIABLE.SWITCH_POWER ) or "0"
 		local msg = "ZiBlue device '" .. _getZiBlueId( ziBlueDevice, feature ) .. "'"
-		if ( feature.isReceiver ) then
+		if ( feature.settings[ "receiver" ] ) then
 			msg = msg .. " (receiver)"
 		end
+
 		-- Pulse
-		--local isPulse = ( Variable.get( deviceId, VARIABLE.PULSE_MODE ) == "1" )
-		local isPulse = table_contains( feature.settings, "pulse" )
+		local isPulse = ( feature.settings[ "pulse" ] == true )
 		-- Toggle
-		--local isToggle = ( Variable.get( deviceId, VARIABLE.TOGGLE_MODE ) == "1" )
-		local isToggle = table_contains( feature.settings, "toggle" )
+		local isToggle = ( feature.settings[ "toggle" ] == true )
 		if ( isToggle or ( status == nil ) or ( status == "" ) ) then
 			if isPulse then
 				-- Always ON in pulse and toggle mode
@@ -955,18 +930,18 @@ DeviceHelper = {
 		end
 
 		-- Send command if needed
-		debug( "isReceiver: " .. tostring(feature.isReceiver) .. ", noAction: " .. tostring(noAction), "DeviceHelper.setStatus" )
-		if ( ( feature.isReceiver ) and not ( noAction == true ) ) then
+		if ( ( feature.settings[ "receiver" ] ) and not ( noAction == true ) ) then
 			local cmd
 			if ( status == "1" ) then
 				cmd = "ON"
 			else
 				cmd = "OFF"
 			end
+			local qualifier = feature.settings[ "qualifier" ] and ( " QUALIFIER " .. ( ( feature.settings[ "qualifier" ] == "1" ) and "1" or "0" ) ) or ""
 			if loadLevel then 
-				Network.send( "ZIA++DIM ID " .. ziBlueDevice.protocolDeviceId .. " " .. ziBlueDevice.protocol .. " %" .. tostring(loadLevel) )
+				Network.send( "ZIA++DIM ID " .. ziBlueDevice.protocolDeviceId .. " " .. ziBlueDevice.protocol .. " %" .. tostring(loadLevel) .. qualifier )
 			else
-				Network.send( "ZIA++" .. cmd .. " ID " .. ziBlueDevice.protocolDeviceId .. " " .. ziBlueDevice.protocol )
+				Network.send( "ZIA++" .. cmd .. " ID " .. ziBlueDevice.protocolDeviceId .. " " .. ziBlueDevice.protocol .. qualifier )
 			end
 		end
 
@@ -1053,11 +1028,12 @@ DeviceHelper = {
 		end
 
 		-- Send command if needed
-		if ( ( feature.isReceiver ) and not ( noAction == true ) ) then
+		if ( ( feature.settings[ "receiver" ] ) and not ( noAction == true ) ) then
+			local qualifier = feature.settings[ "qualifier" ] and ( " QUALIFIER " .. ( ( feature.settings[ "qualifier" ] == "1" ) and "1" or "0" ) ) or ""
 			if ( loadLevel > 0 ) then
-				Network.send( "ZIA++DIM ID " .. ziBlueDevice.protocolDeviceId .. " " .. ziBlueDevice.protocol .. " %" .. tostring(loadLevel) )
+				Network.send( "ZIA++DIM ID " .. ziBlueDevice.protocolDeviceId .. " " .. ziBlueDevice.protocol .. " %" .. tostring(loadLevel) .. qualifier )
 			else
-				Network.send( "ZIA++OFF ID " .. ziBlueDevice.protocolDeviceId .. " " .. ziBlueDevice.protocol )
+				Network.send( "ZIA++OFF ID " .. ziBlueDevice.protocolDeviceId .. " " .. ziBlueDevice.protocol .. qualifier )
 			end
 		end
 
@@ -1750,7 +1726,14 @@ ZiBlueDevices = {
 					g_deviceIdsById[ id ][ deviceNum ] = deviceId
 					-- Features
 					local featureNames = string_split( Variable.get( deviceId, VARIABLE.FEATURE ) or "default", "," )
-					local settings = string_split( Variable.get( deviceId, VARIABLE.SETTING ) or "", "," )
+					-- Settings
+					local settings = {}
+					for _, encodedSetting in ipairs( string_split( Variable.get( deviceId, VARIABLE.SETTING ) or "", "," ) ) do
+						local settingName, value = string.match( encodedSetting, "([^=]*)=?(.*)" )
+						if not string_isEmpty( settingName ) then
+							settings[ settingName ] = not string_isEmpty( value ) and value or true
+						end
+					end
 					for _, featureName in ipairs( featureNames ) do
 						local feature = g_indexZiBlueFeaturesById[ id ][ featureName ]
 						if ( feature ~= nil ) then
@@ -1783,10 +1766,6 @@ ZiBlueDevices = {
 								g_indexZiBlueDevicesByDeviceId[ tostring( deviceId ) ] = { ziBlueDevice, { feature } }
 							else
 								table.insert( g_indexZiBlueDevicesByDeviceId[ tostring( deviceId ) ][2], feature )
-							end
-							-- Receiver
-							if table_contains( settings, "receiver" ) then
-								feature.isReceiver = true
 							end
 						end
 						debug( "Found device #" .. tostring(deviceId) .. "(" .. feature.deviceName .. "), protocol " .. protocol .. ", id " .. protocolDeviceId .. ", feature " .. featureName, "ZiBlueDevices.retrieve" )
@@ -2159,9 +2138,9 @@ function createDevices( productIds )
 				local parameters = _getEncodedParameters( deviceTypeInfos )
 				parameters = parameters .. VARIABLE.FEATURE[1] .. "," .. VARIABLE.FEATURE[2] .. "=state\n"
 				if ( protocol == "PARROT" ) then
-					parameters = parameters .. VARIABLE.SETTING[1] .. "," .. VARIABLE.SETTING[2] .. "=receiver,button\n"
+					parameters = parameters .. VARIABLE.SETTING[1] .. "," .. VARIABLE.SETTING[2] .. "=" .. table.concat( table_append( settings, { "receiver", "button" } ), "," )  .. "\n"
 				else
-					parameters = parameters .. VARIABLE.SETTING[1] .. "," .. VARIABLE.SETTING[2] .. "=receiver\n"
+					parameters = parameters .. VARIABLE.SETTING[1] .. "," .. VARIABLE.SETTING[2] .. "=" .. table.concat( table_append( settings, "receiver" ), "," ) .. "\n"
 				end
 				if ( not deviceName or deviceName == "" ) then
 					deviceName = protocol .. " " .. protocolDeviceId
