@@ -17,7 +17,7 @@ local status, json = pcall( require, "dkjson" )
 
 _NAME = "ZiBlueGateway"
 _DESCRIPTION = "ZiBlue gateway for the Vera"
-_VERSION = "0.5"
+_VERSION = "0.6"
 _AUTHOR = "vosmont"
 
 
@@ -91,8 +91,8 @@ local VARIABLE = {
 	TRIPPED = { "urn:micasaverde-com:serviceId:SecuritySensor1", "Tripped", false, "LAST_TRIP" },
 	ARMED_TRIPPED = { "urn:micasaverde-com:serviceId:SecuritySensor1", "ArmedTripped", false, "LAST_TRIP" },
 	LAST_TRIP = { "urn:micasaverde-com:serviceId:SecuritySensor1", "LastTrip", true },
-	TAMPER_ALARM = { "urn:micasaverde-com:serviceId:SecuritySensor1", "sl_TamperAlarm", false }, -- TODO : date pour alarm ?
-	--LAST_TAMPER = { "urn:micasaverde-com:serviceId:SecuritySensor1", "LastTamper", true },
+	TAMPER_ALARM = { "urn:micasaverde-com:serviceId:HaDevice1", "sl_TamperAlarm", false, "LAST_TAMPER" },
+	LAST_TAMPER = { "urn:micasaverde-com:serviceId:SecuritySensor1", "LastTamper", true },
 	-- Battery
 	BATTERY_LEVEL = { "urn:micasaverde-com:serviceId:HaDevice1", "BatteryLevel", true, "BATTERY_DATE" },
 	BATTERY_DATE = { "urn:micasaverde-com:serviceId:HaDevice1", "BatteryDate", true },
@@ -133,13 +133,19 @@ local DEVICE = {
 	DOOR_SENSOR = {
 		name = "ui7_device_type_door_sensor",
 		type = "urn:schemas-micasaverde-com:device:DoorSensor:1", file = "D_DoorSensor1.xml",
-		parameters = { { "ARMED", "0" }, { "TRIPPED", "0" } },
+		parameters = { { "ARMED", "0" }, { "TRIPPED", "0" }, { "TAMPER_ALARM", "0" } },
 		commands = {
 			[ "ON" ] = function( ziBlueDevice, feature )
 				DeviceHelper.setTripped( ziBlueDevice, feature, "1" )
 			end,
 			[ "OFF" ] = function( ziBlueDevice, feature )
 				DeviceHelper.setTripped( ziBlueDevice, feature, "0" )
+			end,
+			[ "alarm" ] = function( ziBlueDevice, feature )
+				DeviceHelper.setTripped( ziBlueDevice, feature, "1" )
+			end,
+			[ "Tamper" ] = function( ziBlueDevice, feature )
+				DeviceHelper.setTamperAlarm( ziBlueDevice, feature, "1" )
 			end
 		}
 	},
@@ -147,26 +153,38 @@ local DEVICE = {
 		name = "ui7_device_type_motion_sensor",
 		type = "urn:schemas-micasaverde-com:device:MotionSensor:1", file = "D_MotionSensor1.xml",
 		--jsonFile = "D_MotionSensorWithTamper1.json",
-		parameters = { { "ARMED", "0" }, { "TRIPPED", "0" } },
+		parameters = { { "ARMED", "0" }, { "TRIPPED", "0" }, { "TAMPER_ALARM", "0" } },
 		commands = {
 			[ "ON" ] = function( ziBlueDevice, feature )
 				DeviceHelper.setTripped( ziBlueDevice, feature, "1" )
 			end,
 			[ "OFF" ] = function( ziBlueDevice, feature )
 				DeviceHelper.setTripped( ziBlueDevice, feature, "0" )
+			end,
+			[ "Alarm" ] = function( ziBlueDevice, feature )
+				DeviceHelper.setTripped( ziBlueDevice, feature, "1" )
+			end,
+			[ "Tamper" ] = function( ziBlueDevice, feature )
+				DeviceHelper.setTamperAlarm( ziBlueDevice, feature, "1" )
 			end
 		}
 	},
 	SMOKE_SENSOR = {
 		name = "ui7_device_type_smoke_sensor",
 		type = "urn:schemas-micasaverde-com:device:SmokeSensor:1", file = "D_SmokeSensor1.xml",
-		parameters = { { "ARMED", "0" }, { "TRIPPED", "0" } },
+		parameters = { { "ARMED", "0" }, { "TRIPPED", "0" }, { "TAMPER_ALARM", "0" } },
 		commands = {
 			[ "ON" ] = function( ziBlueDevice, feature )
 				DeviceHelper.setTripped( ziBlueDevice, feature, "1" )
 			end,
 			[ "OFF" ] = function( ziBlueDevice, feature )
 				DeviceHelper.setTripped( ziBlueDevice, feature, "0" )
+			end,
+			[ "Alarm" ] = function( ziBlueDevice, feature )
+				DeviceHelper.setTripped( ziBlueDevice, feature, "1" )
+			end,
+			[ "Tamper" ] = function( ziBlueDevice, feature )
+				DeviceHelper.setTamperAlarm( ziBlueDevice, feature, "1" )
 			end
 		}
 	},
@@ -213,6 +231,9 @@ local DEVICE = {
 			end,
 			[ "OFF" ] = function( ziBlueDevice, feature )
 				DeviceHelper.setStatus( ziBlueDevice, feature, "0", nil, true )
+			end,
+			[ "button/command" ] = function( ziBlueDevice, feature )
+				DeviceHelper.setStatus( ziBlueDevice, feature, "1", nil, true )
 			end
 		}
 	},
@@ -226,6 +247,9 @@ local DEVICE = {
 			end,
 			[ "OFF" ] = function( ziBlueDevice, feature )
 				DeviceHelper.setStatus( ziBlueDevice, feature, "0", nil, true )
+			end,
+			[ "DIM" ] = function( ziBlueDevice, feature ) -- TODO : used ? loadLevel ?
+				DeviceHelper.setLoadLevel( ziBlueDevice, feature, loadLevel, nil, nil, true )
 			end
 		}
 	},
@@ -265,12 +289,37 @@ local DEVICE = {
 	SHUTTER = {
 		name = "ui7_device_type_window_covering",
 		type = "urn:schemas-micasaverde-com:device:WindowCovering:1", file = "D_WindowCovering1.xml",
-		parameters = { { "DIMMER_LEVEL", "0" } }
+		parameters = { { "DIMMER_LEVEL", "0" } },
+		commands = {
+			[ "ON" ] = function( ziBlueDevice, feature ) -- unused
+				DeviceHelper.setStatus( ziBlueDevice, feature, "1", nil, true )
+			end,
+			[ "OFF" ] = function( ziBlueDevice, feature ) -- unused
+				DeviceHelper.setStatus( ziBlueDevice, feature, "0", nil, true )
+			end,
+			[ "Up/On" ] = function( ziBlueDevice, feature )
+				DeviceHelper.setStatus( ziBlueDevice, feature, "1", nil, true )
+			end,
+			[ "Down/Off" ] = function( ziBlueDevice, feature )
+				DeviceHelper.setStatus( ziBlueDevice, feature, "0", nil, true )
+			end,
+			[ "My" ] = function( ziBlueDevice, feature )
+				DeviceHelper.setStatus( ziBlueDevice, feature, "0", nil, true )
+			end
+		}
 	},
 	PORTAL  = { -- TODO
 		name = "ui7_device_type_window_covering",
 		type = "urn:schemas-micasaverde-com:device:WindowCovering:1", file = "D_WindowCovering1.xml",
-		parameters = { { "DIMMER_LEVEL", "0" } }
+		parameters = { { "DIMMER_LEVEL", "0" } },
+		commands = {
+			[ "button1" ] = function( ziBlueDevice, feature )
+				DeviceHelper.setStatus( ziBlueDevice, feature, "1", nil, true )
+			end,
+			[ "button2" ] = function( ziBlueDevice, feature )
+				DeviceHelper.setStatus( ziBlueDevice, feature, "0", nil, true )
+			end
+		}
 	}
 }
 
@@ -316,66 +365,154 @@ local JOB_STATUS = {
 -- **************************************************
 
 local ZIBLUE_INFOS = {
-	[ "0" ] = {
-		{ features = { ["state"] = {} }, deviceTypes = { "BINARY_LIGHT", "DIMMABLE_LIGHT" }, settings = { "button", "pulse" } }
+	[ "0" ] = { -- X10 / DOMIA LITE protocol / PARROT
+		name = "Detector/sensor",
+		featureGroups = {
+			{ features = { "state" }, deviceTypes = { "BINARY_LIGHT", "DIMMABLE_LIGHT", "DOOR_SENSOR", "MOTION_SENSOR", "SMOKE_SENSOR" }, settings = { "button", "pulse" } }
+		}
 	},
-	[ "1" ] = {
-		{ features = { ["state"] = {} }, deviceTypes = { "BINARY_LIGHT", "DOOR_SENSOR", "MOTION_SENSOR", "SMOKE_SENSOR" } }
+	[ "KD101;1" ] = { -- KD101
+		name = "Smoke sensor",
+		featureGroups = {
+			{ features = { "state" }, deviceTypes = { "SMOKE_SENSOR" } }
+		}
 	},
-	[ "2;0" ] = { -- VISONIC detector/sensor
-		{ features = {
-			["Tamper"] = {}, ["alarm"] = {}, ["state"] = {}
-		}, deviceTypes = { "DOOR_SENSOR", "MOTION_SENSOR", "SMOKE_SENSOR" } } -- TODO
+	[ "1" ] = { -- X10 (24/32 bits ID) / CHACON / BLYSS
+		name = "Detector/sensor",
+		featureGroups = {
+			{ features = { "state" }, deviceTypes = { "BINARY_LIGHT", "DOOR_SENSOR", "MOTION_SENSOR", "SMOKE_SENSOR" } }
+		}
 	},
-	[ "2;1" ] = { --  VISONIC remote control
-		{ features = { ["button/command"] = {}, ["state"] = {} }, deviceTypes = { "BINARY_LIGHT" }, settings = { "button", "pulse" } }
+	[ "2;0" ] = { -- VISONIC detector/sensor (PowerCode device)
+		name = "Detector/sensor",
+		featureGroups = {
+			{ features = { "state" } },
+			{ features = { "Tamper", "Alarm", "Supervisor/Alive" }, deviceTypes = { "BINARY_LIGHT", "DOOR_SENSOR", "MOTION_SENSOR", "SMOKE_SENSOR" } }
+		}
 	},
-	[ "3;0" ] = { -- RTS shutter
-		{ features = { ["state"] = {} }, deviceTypes = { "SHUTTER" } }
+	[ "2;1" ] = { --  VISONIC remote control (CodeSecure device)
+		name = "Remote control",
+		featureGroups = {
+			{ features = { "state" } },
+			{ features = { "button/command" }, deviceTypes = { "BINARY_LIGHT" }, settings = { "button", "pulse" } },
+			{ features = { "button1" }, deviceTypes = { "BINARY_LIGHT" }, settings = { "button", "pulse" } },
+			{ features = { "button2" }, deviceTypes = { "BINARY_LIGHT" }, settings = { "button", "pulse" } },
+			{ features = { "button3" }, deviceTypes = { "BINARY_LIGHT" }, settings = { "button", "pulse" } },
+			{ features = { "button4" }, deviceTypes = { "BINARY_LIGHT" }, settings = { "button", "pulse" } }
+		}
 	},
-	[ "3;1" ] = { -- RTS portal
-		{ features = { ["state"] = {} }, deviceTypes = { "PORTAL" } }
+	[ "3;0" ] = { -- RTS shutter remote control
+		name = "Shutter remote control",
+		featureGroups = {
+			{ features = { "state" } },
+			{ features = { "Up/On" }, deviceTypes = { "BINARY_LIGHT" }, settings = { "button", "pulse" }, isUsed = true },
+			{ features = { "Down/Off" }, deviceTypes = { "BINARY_LIGHT" }, settings = { "button", "pulse" }, isUsed = true },
+			{ features = { "My" }, deviceTypes = { "BINARY_LIGHT" }, settings = { "button", "pulse" }, isUsed = true }
+		}
+	},
+	[ "3;1" ] = { -- RTS portal remote control
+		name = "Portal remote control",
+		featureGroups = {
+			{ features = { "state" } },
+			{ features = { "button1" }, deviceTypes = { "BINARY_LIGHT" }, settings = { "button", "pulse" }, isUsed = true },
+			{ features = { "button2" }, deviceTypes = { "BINARY_LIGHT" }, settings = { "button", "pulse" }, isUsed = true }
+		}
 	},
 	[ "4" ] = { -- Scientific Oregon
-		{ features = { ["temperature"] = {} }, deviceTypes = { "TEMPERATURE_SENSOR" } },
-		{ features = { ["hygrometry"] = {} }, deviceTypes = { "HUMIDITY_SENSOR" } }
+		name = "Thermo/hygro sensor",
+		featureGroups = {
+			{ features = { "temperature" }, deviceTypes = { "TEMPERATURE_SENSOR" } },
+			{ features = { "hygrometry" }, deviceTypes = { "HUMIDITY_SENSOR" } }
+		}
 	},
 	[ "5" ] = { -- Scientific Oregon
-		{ features = { ["temperature"] = {} }, deviceTypes = { "TEMPERATURE_SENSOR" } },
-		{ features = { ["hygrometry"] = {} }, deviceTypes = { "HUMIDITY_SENSOR" } },
-		{ features = { ["pressure"] = {} }, deviceTypes = { "BAROMETER_SENSOR" } }
+		name = "Atmospheric pressure sensor",
+		featureGroups = {
+			{ features = { "temperature" }, deviceTypes = { "TEMPERATURE_SENSOR" } },
+			{ features = { "hygrometry" }, deviceTypes = { "HUMIDITY_SENSOR" } },
+			{ features = { "pressure" }, deviceTypes = { "BAROMETER_SENSOR" } }
+		}
 	},
-	[ "6" ] = {
-		{ features = { ["direction"] = {}, ["wind speed"] = {} }, deviceTypes = { "WIND_SENSOR" } }
+	[ "6" ] = { -- Scientific Oregon
+		name = "Wind sensor",
+		featureGroups = {
+			{ features = { "direction", "wind speed" }, deviceTypes = { "WIND_SENSOR" } }
+		}
 	},
-	[ "7" ] = {
-		{ features = { ["uv"] = {} }, deviceTypes = { "UV_SENSOR" } }
+	[ "7" ] = { -- Scientific Oregon
+		name = "UV sensor",
+		featureGroups = {
+			{ features = { "uv" }, deviceTypes = { "UV_SENSOR" } }
+		}
 	},
-	[ "8" ] = {
-		{ features = { ["energy"] = {}, ["power"] = {} }, deviceTypes = { "POWER_METER" } },
-		{ features = { ["P1"] = {} }, deviceTypes = { "POWER_METER" } },
-		{ features = { ["P2"] = {} }, deviceTypes = { "POWER_METER" } },
-		{ features = { ["P3"] = {} }, deviceTypes = { "POWER_METER" } }
+	[ "8" ] = { -- OWL
+		name = "Power meter",
+		featureGroups = {
+			{ features = { "energy", "power" }, deviceTypes = { "POWER_METER" } },
+			{ features = { "P1" }, deviceTypes = { "POWER_METER" } },
+			{ features = { "P2" }, deviceTypes = { "POWER_METER" } },
+			{ features = { "P3" }, deviceTypes = { "POWER_METER" } }
+		}
 	},
-	[ "9" ] = {
-		{ features = { ["total rain"] = {}, ["current rain"] = {} }, deviceTypes = { "RAIN_METER" } } -- TODO
+	[ "9" ] = { -- Scientific Oregon
+		name = "Rain meter",
+		featureGroups = {
+			{ features = { "total rain", "current rain" }, deviceTypes = { "RAIN_METER" } } -- TODO
+		}
 	},
-	
-	[ "11;0" ] = {
-		{ features = { ["totalrain"] = {}, ["rain"] = {} }, deviceTypes = { "RAIN_METER" } } -- TODO
+	[ "10" ] = { -- X2D Thermostats (TODO)
+		name = "Thermostat (TODO)",
+		featureGroups = {
+			{ features = {}, deviceTypes = {}, name = "" }
+		}
 	},
-	[ "11;1" ] = {
-		{ features = { ["totalrain"] = {}, ["rain"] = {} }, deviceTypes = { "RAIN_METER" } } -- TODO
+	[ "11;0" ] = { -- X2D detector/sensor device
+		name = "Detector/sensor",
+		featureGroups = {
+			{ features = { "state" } },
+			{ features = { "Tamper", "Alarm" }, deviceTypes = { "DOOR_SENSOR", "MOTION_SENSOR", "SMOKE_SENSOR" } }
+		}
 	},
+	[ "11;1" ] = { -- X2D device / shutter remote control
+		name = "Shutter remote control",
+		featureGroups = {
+			{ features = { "state" }, deviceTypes = { "BINARY_LIGHT" } },
+			{ features = { "On" }, deviceTypes = { "BINARY_LIGHT" }, settings = { "button", "pulse" }, isUsed = true },
+			{ features = { "Off" }, deviceTypes = { "BINARY_LIGHT" }, settings = { "button", "pulse" }, isUsed = true },
+			{ features = { "Stop" }, deviceTypes = { "BINARY_LIGHT" }, settings = { "button", "pulse" }, isUsed = true }
+		}
+	}
 }
 
+-- Compute feature structure
+for _, ziblueInfos in pairs( ZIBLUE_INFOS ) do
+	for _, featureGroup in ipairs( ziblueInfos.featureGroups ) do
+		if not ( featureGroup.isUsed == true ) then
+			featureGroup.isUsed = false
+		end
+		local features = {}
+		for _, featureName in ipairs( featureGroup.features ) do
+			features[ featureName ] = { isUsed = false }
+		end
+		featureGroup.features = features
+	end
+	
+end
+
+local function _getZiBlueInfos( protocol, infoType, subType )
+	local ziblueInfos = ZIBLUE_INFOS[ tostring(protocol) .. ";" .. tostring(infoType) ]
+					or ZIBLUE_INFOS[ tostring(infoType) .. ";" .. tostring(subType) ]
+					or ZIBLUE_INFOS[ tostring(infoType) ]
+					or { name = "Unknown", featureGroups = {} }
+	return ziblueInfos
+end
 
 local ZIBLUE_SEND_PROTOCOL = {
-	VISONIC433 = { name = "Visonic 433Mhz" },
-	VISONIC868 = { name = "Visonic 868Mhz" },
+	VISONIC433 = { name = "Visonic 433Mhz (PowerCode)" },
+	VISONIC868 = { name = "Visonic 868Mhz (PowerCode)" },
 	CHACON = { name = "Chacon 433Mhz" },
 	DOMIA = { name = "Domia 433Mhz" },
-	X10 = { name = "Visonic 433Mhz" },
+	X10 = { name = "X10 433Mhz" },
 	X2D433 = { name = "X2D 433Mhz" },
 	X2D868 = { name = "X2D 868Mhz" },
 	X2DSHUTTER = { name = "X2D Shutter 868Mhz" },
@@ -383,7 +520,7 @@ local ZIBLUE_SEND_PROTOCOL = {
 	X2DGAS = { name = "X2D Gaz 868Mhz" },
 	RTS = {
 		name = "Somfy RTS 433Mhz",
-		deviceTypes = { "BINARY_LIGHT", "SHUTTER;qualifier=0", "PORTAL;qualifier=1" },
+		deviceTypes = { "BINARY_LIGHT", "SHUTTER;qualifier=0", "PORTAL;qualifier=1" }, -- TODO : portal
 		settings = {
 			{ variable = "qualifier", name = "Qualifier", type = "string" }
 		}
@@ -859,6 +996,15 @@ end
 -- **************************************************
 
 DeviceHelper = {
+	isDimmable = function( ziBlueDevice, feature, checkProtocol )
+		if checkProtocol then
+			if ( ziBlueDevice.protocol == "RTS" ) then
+				return false
+			end
+		end
+		return luup.device_supports_service( VARIABLE.DIMMER_LEVEL[1], feature.deviceId )
+	end,
+
 	-- Switch OFF/ON/TOGGLE
 	setStatus = function( ziBlueDevice, feature, status, isLongPress, noAction )
 		if status then
@@ -902,7 +1048,7 @@ DeviceHelper = {
 		local loadLevel
 		if ( status == "1" ) then
 			msg = msg .. " ON device #" .. tostring( deviceId )
-			if luup.device_supports_service( VARIABLE.DIMMER_LEVEL[1], deviceId ) then
+			if DeviceHelper.isDimmable( ziBlueDevice, feature, false ) then
 				loadLevel = Variable.get( deviceId, VARIABLE.DIMMER_LEVEL_OLD ) or "100"
 				if ( loadLevel == "0" ) then
 					loadLevel = "100"
@@ -912,7 +1058,7 @@ DeviceHelper = {
 		else
 			msg = msg .. " OFF device #" .. tostring( deviceId )
 			status = "0"
-			if luup.device_supports_service( VARIABLE.DIMMER_LEVEL[1], deviceId ) then
+			if DeviceHelper.isDimmable( ziBlueDevice, feature, false ) then
 				msg = msg .. " at 0%"
 				loadLevel = 0
 			end
@@ -938,17 +1084,18 @@ DeviceHelper = {
 				cmd = "OFF"
 			end
 			local qualifier = feature.settings[ "qualifier" ] and ( " QUALIFIER " .. ( ( feature.settings[ "qualifier" ] == "1" ) and "1" or "0" ) ) or ""
-			if loadLevel then 
+			if ( loadLevel and DeviceHelper.isDimmable( ziBlueDevice, feature, true ) ) then 
 				Network.send( "ZIA++DIM ID " .. ziBlueDevice.protocolDeviceId .. " " .. ziBlueDevice.protocol .. " %" .. tostring(loadLevel) .. qualifier )
 			else
 				Network.send( "ZIA++" .. cmd .. " ID " .. ziBlueDevice.protocolDeviceId .. " " .. ziBlueDevice.protocol .. qualifier )
 			end
 		end
 
+		-- Pulse
 		if ( isPulse and ( status == "1" ) ) then
 			-- TODO : OFF après 200ms : voir multiswitch
 			msg = "ZiBlue device '" .. _getZiBlueId( ziBlueDevice, feature ) .. "' - Pulse OFF device #" .. tostring( deviceId )
-			if luup.device_supports_service( VARIABLE.DIMMER_LEVEL[1], deviceId ) then
+			if DeviceHelper.isDimmable( ziBlueDevice, feature, false ) then
 				debug( msg .. " at 0%", "DeviceHelper.setStatus" )
 				Variable.set( deviceId, VARIABLE.SWITCH_POWER, "0" )
 				Variable.set( deviceId, VARIABLE.DIMMER_LEVEL_OLD, Variable.get( deviceId, VARIABLE.DIMMER_LEVEL ) )
@@ -976,9 +1123,9 @@ DeviceHelper = {
 		formerLoadLevel = tonumber( formerLoadLevel ) or 0
 		local msg = "Dim"
 
-		if ( isLongPress and not luup.device_supports_service( VARIABLE.DIMMER_LEVEL[1], deviceId ) ) then
+		if ( isLongPress and not DeviceHelper.isDimmable( ziBlueDevice, feature, true ) ) then
 			-- Long press handled by a switch
-			return DeviceHelper.setStatus( ziBlueDevice, feature, nil, isLongPress )
+			return DeviceHelper.setStatus( ziBlueDevice, feature, nil, isLongPress, noAction )
 
 		elseif ( loadLevel == nil ) then
 			-- Toggle dim
@@ -1028,10 +1175,18 @@ DeviceHelper = {
 		end
 
 		-- Send command if needed
-		if ( ( feature.settings[ "receiver" ] ) and not ( noAction == true ) ) then
-			local qualifier = feature.settings[ "qualifier" ] and ( " QUALIFIER " .. ( ( feature.settings[ "qualifier" ] == "1" ) and "1" or "0" ) ) or ""
+		if ( feature.settings.receiver and not ( noAction == true ) ) then
+			local qualifier = feature.settings.qualifier and ( " QUALIFIER " .. ( ( feature.settings.qualifier == "1" ) and "1" or "0" ) ) or ""
 			if ( loadLevel > 0 ) then
-				Network.send( "ZIA++DIM ID " .. ziBlueDevice.protocolDeviceId .. " " .. ziBlueDevice.protocol .. " %" .. tostring(loadLevel) .. qualifier )
+				if not DeviceHelper.isDimmable( ziBlueDevice, feature, true ) then
+					if ( loadLevel == 100 ) then
+						Network.send( "ZIA++ON ID " .. ziBlueDevice.protocolDeviceId .. " " .. ziBlueDevice.protocol .. qualifier )
+					else
+						debug( "This protocol does not support DIM", "DeviceHelper.setLoadLevel" )
+					end
+				else
+					Network.send( "ZIA++DIM ID " .. ziBlueDevice.protocolDeviceId .. " " .. ziBlueDevice.protocol .. " %" .. tostring(loadLevel) .. qualifier )
+				end
 			else
 				Network.send( "ZIA++OFF ID " .. ziBlueDevice.protocolDeviceId .. " " .. ziBlueDevice.protocol .. qualifier )
 			end
@@ -1160,8 +1315,24 @@ DeviceHelper = {
 	-- Manage roller shutter
 	moveShutter = function( ziBlueDevice, feature, direction, noAction )
 		debug( "Shutter #" .. tostring(feature.deviceId) .. " direction: " .. tostring(direction), "DeviceHelper.moveShutter" )
-		
-		debug("TODO");
+		if ( direction == "up" ) then
+			return DeviceHelper.setStatus( ziBlueDevice, feature, "1", nil, noAction )
+		elseif ( direction == "down" ) then
+			return DeviceHelper.setStatus( ziBlueDevice, feature, "0", nil, noAction )
+		elseif ( direction == "stop" ) then
+			if ( ziBlueDevice.protocol == "RTS" ) then
+				-- "My" fonction for RTS
+				if ( feature.settings.receiver and not ( noAction == true ) ) then
+					debug( "RTS 'My' function", "DeviceHelper.moveShutter" )
+					Network.send( "ZIA++DIM ID " .. ziBlueDevice.protocolDeviceId .. " RTS %4 QUALIFIER 0" )
+				end
+			else
+				debug( "Stop is not managed for the protocol " .. ziBlueDevice.protocol, "DeviceHelper.moveShutter" )
+			end
+		else
+			error( "Shutter #" .. tostring(feature.deviceId) .. " direction: " .. tostring(direction) .. " is not allowed", "DeviceHelper.moveShutter" )
+		end
+
 	end
 }
 
@@ -1175,7 +1346,7 @@ local g_isProcessingMessage = false
 local g_lastCommandsByZiBlueId = {}
 
 Message = {
-	process = function( source, qualifier, data )
+	process = function( source, qualifier, data, lul_data )
 		local header = data.frame.header
 		local protocol = header.protocolMeaning
 		local infoType = header.infoType
@@ -1195,11 +1366,14 @@ Message = {
 				return
 			end
 			local ziBlueDevice, feature = ZiBlueDevices.getById( id, featureName )
+			if ( ziBlueDevice and ziBlueDevice.isNew ) then
+				return
+			end
 			if ( ziBlueDevice and feature ) then
 				-- ZiBlue device is known for this feature
 				if ( type( data ) == "table" ) then
 					feature.state = data.value .. " " .. data.unit
-				else
+				elseif ( data ~= nil ) then
 					feature.state = data
 				end
 				local deviceTypeInfos = _getDeviceTypeInfos( feature.deviceType )
@@ -1219,7 +1393,7 @@ Message = {
 			end
 			if ( ziBlueDevice == nil ) then
 				-- Add this device to the discovered ZiBlue devices (but not yet known)
-				if DiscoveredDevices.add( protocol, protocolDeviceId, dataFlag, rfQuality, infoType, subType, featureName, data ) then
+				if DiscoveredDevices.add( protocol, protocolDeviceId, dataFlag, rfQuality, infoType, subType, featureName, data, nil, lul_data ) then
 					debug( "This message is from an unknown ZiBlue device '" .. id .. "' for feature '" .. featureName .. "'", "Message.process" )
 				else
 					debug( "This message is from an ZiBlue device already discovered '" .. id .. "'", "Message.process" )
@@ -1231,7 +1405,7 @@ Message = {
 
 		-- Battery
 		if ( infos.lowBatt == "1" ) then
-			_addCommand( "LowBatt", "LowBatt", "LowBatt" )
+			_addCommand( "LowBatt", "LowBatt" )
 		end
 
 		-- State
@@ -1249,7 +1423,7 @@ Message = {
 		-- Flags (can be "LowBatt")
 		if ( infos.qualifierMeaning and infos.qualifierMeaning.flags ) then
 			for _, flag in ipairs( infos.qualifierMeaning.flags ) do
-				_addCommand( flag, flag, flag )
+				_addCommand( flag, flag )
 			end
 		end
 
@@ -1305,7 +1479,7 @@ function handleIncoming( lul_data )
 					elseif data.parrotStatus then
 						Tools.updateParrotStatus( data.parrotStatus.info )
 					else
-						Message.process( source, qualifier, data )
+						Message.process( source, qualifier, data, lul_data )
 					end
 				else
 					error( "JSON error: " .. tostring( jsonError ) )
@@ -1587,24 +1761,20 @@ local g_discoveredDevices = {}
 local g_indexDiscoveredDevicesById = {}
 
 DiscoveredDevices = {
-	add = function( protocol, protocolDeviceId, dataFlag, rfQuality, infoType, subType, featureName, data, comment )
+	add = function( protocol, protocolDeviceId, dataFlag, rfQuality, infoType, subType, featureName, data, comment, lul_data )
 		local hasBeenAdded = false
 		local id = protocol .. ";" .. protocolDeviceId
 		local discoveredDevice = g_indexDiscoveredDevicesById[ id ]
 		if ( discoveredDevice == nil ) then
-			local ziblueInfos = ZIBLUE_INFOS[ tostring( infoType ) .. ";" .. tostring(subType) ] or ZIBLUE_INFOS[ tostring( infoType ) ] or {}
+			local ziblueInfos = _getZiBlueInfos( protocol, infoType, subType )
 			discoveredDevice = {
+				name = ziblueInfos.name,
 				protocol = protocol,
 				protocolFlag = ( ( dataFlag ~= "-1 " ) and tostring( ZIBLUE_DATA_FLAG[ dataFlag ] ) or "" ),
 				protocolDeviceId = protocolDeviceId,
 				comment = comment,
-				featureGroups = table_extend( {}, ziblueInfos )
+				featureGroups = table_extend( {}, ziblueInfos.featureGroups )
 			}
-			for _, info in ipairs( discoveredDevice.featureGroups ) do
-				if not ( info.isUsed == true ) then
-					info.isUsed = false
-				end
-			end
 			table.insert( g_discoveredDevices, discoveredDevice )
 			g_indexDiscoveredDevicesById[ id ] = discoveredDevice
 			hasBeenAdded = true
@@ -1613,22 +1783,22 @@ DiscoveredDevices = {
 		discoveredDevice.rfQuality = tonumber( rfQuality )
 		-- Features
 		local hasBeenFound = false
-		for _, info in ipairs( discoveredDevice.featureGroups ) do
-			if info.features[ featureName ] then
+		for _, group in ipairs( discoveredDevice.featureGroups ) do
+			if group.features[ featureName ] then
 				hasBeenFound = true
-				info.features[ featureName ].isUsed = true
+				group.features[ featureName ].isUsed = true
 				if ( type( data ) == "table" ) then
-					info.features[ featureName ].state = data.value .. " " .. data.unit
+					group.features[ featureName ].state = data.value .. " " .. data.unit
 					if ( ( featureName == "hygrometry" ) and ( data.value == "0" ) ) then
-						info.features[ featureName ].isUsed = false
+						group.features[ featureName ].isUsed = false
 					end
 				else
-					info.features[ featureName ].state = data
+					group.features[ featureName ].state = data
 				end
-				info.isUsed = false
-				for _, feature in pairs( info.features ) do
+				group.isUsed = false
+				for _, feature in pairs( group.features ) do
 					if feature.isUsed then
-						info.isUsed = true
+						group.isUsed = true
 					end
 				end
 				debug( "Discovered ZiBlue device '" .. id .. "' and new feature '" .. featureName .. "'", "DiscoveredDevices.add" )
@@ -1637,7 +1807,7 @@ DiscoveredDevices = {
 		end
 		if not hasBeenFound then
 			if ( featureName ~= "LowBatt" ) then
-				warning( "Feature '" .. featureName .. "' is not known for ZiBlue device '" .. id .. "'", "DiscoveredDevices.add" )
+				error( "Feature '" .. featureName .. "' is not known for ZiBlue device '" .. id .. "', RF frame: " .. tostring(lul_data), "DiscoveredDevices.add" )
 			end
 		end
 		discoveredDevice.lastUpdate = os.time()
@@ -1707,7 +1877,7 @@ ZiBlueDevices = {
 						ziBlueDevice = {
 							protocol = protocol,
 							protocolDeviceId = protocolDeviceId,
-							dataFlag = 0, -- TODO : attention nécessaire pour l'envoi ?
+							dataFlag = 0,
 							rfQuality = -1,
 							features = {}
 						}
@@ -2103,29 +2273,31 @@ function createDevices( productIds )
 					end
 				end
 				for i, featureGroup in ipairs( featureGroups ) do
-					local deviceTypeName = deviceTypeNames[i]
-					if ( ( deviceTypeName == nil ) or not table_contains( featureGroup.deviceTypes, deviceTypeName ) ) then
-						deviceTypeName = deviceTypeNames[1]
-						-- TODO : log pb
+					if featureGroup.deviceTypes then
+						local deviceTypeName = deviceTypeNames[i]
+						if ( ( deviceTypeName == nil ) or not table_contains( featureGroup.deviceTypes, deviceTypeName ) ) then
+							error( "Requested device type '" .. tostring(deviceTypeName) .. "' is not allowed, replaced with '" .. deviceTypeNames[1] .. "'" , "createDevices" )
+							deviceTypeName = deviceTypeNames[1]
+						end
+
+						-- Add new device
+						debug( msg .. ", create device " .. deviceTypeName .. " from discovered ZiBlue device", "createDevices" )
+						local deviceTypeInfos = _getDeviceTypeInfos( deviceTypeName )
+						local parameters = _getEncodedParameters( deviceTypeInfos )
+						local featureNames = table_getKeys( table_filter( featureGroup.features, function( k, v ) return not ( v.isUsed == false ) end ) )
+						parameters = parameters .. VARIABLE.FEATURE[1] .. "," .. VARIABLE.FEATURE[2] .. "=" .. table.concat( featureNames, "," ) .. "\n"
+						parameters = parameters .. VARIABLE.ASSOCIATION[1] .. "," .. VARIABLE.ASSOCIATION[2] .. "=\n"
+						parameters = parameters .. VARIABLE.SETTING[1] .. "," .. VARIABLE.SETTING[2] .. "=" .. table.concat( table_append( settings, featureGroup.settings or {}, true ), "," ) .. "\n"
+						if ( featureGroup.isBatteryPowered ) then -- TODO
+							parameters = parameters .. VARIABLE.BATTERY_LEVEL[1] .. "," .. VARIABLE.BATTERY_LEVEL[2] .. "=\n"
+						end
+
+						deviceName = protocol .. " " .. protocolDeviceId .. ( ( #featureGroups > 1 ) and ( "/" .. tostring(i) ) or "" )
+						local newDeviceId = _createDevice( protocol, protocolDeviceId, i, deviceName, deviceTypeInfos, roomId, parameters, featureNames )
+
+						debug( msg .. ", device #" .. tostring(newDeviceId) .. "(" .. deviceName .. ") has been created", "createDevices" )
+						hasBeenCreated = true
 					end
-
-					-- Add new device
-					debug( msg .. ", create device " .. deviceTypeName .. " from discovered ZiBlue device", "createDevices" )
-					local deviceTypeInfos = _getDeviceTypeInfos( deviceTypeName )
-					local parameters = _getEncodedParameters( deviceTypeInfos )
-					local featureNames = table_getKeys( table_filter( featureGroup.features, function( k, v ) return not ( v.isUsed == false ) end ) )
-					parameters = parameters .. VARIABLE.FEATURE[1] .. "," .. VARIABLE.FEATURE[2] .. "=" .. table.concat( featureNames, "," ) .. "\n"
-					parameters = parameters .. VARIABLE.ASSOCIATION[1] .. "," .. VARIABLE.ASSOCIATION[2] .. "=\n"
-					parameters = parameters .. VARIABLE.SETTING[1] .. "," .. VARIABLE.SETTING[2] .. "=" .. table.concat( table_append( settings, featureGroup.settings or {}, true ), "," ) .. "\n"
-					if ( featureGroup.isBatteryPowered ) then
-						parameters = parameters .. VARIABLE.BATTERY_LEVEL[1] .. "," .. VARIABLE.BATTERY_LEVEL[2] .. "=\n"
-					end
-
-					deviceName = protocol .. " " .. protocolDeviceId .. ( ( #featureGroups > 1 ) and ( "/" .. tostring(i) ) or "" )
-					local newDeviceId = _createDevice( protocol, protocolDeviceId, i, deviceName, deviceTypeInfos, roomId, parameters, featureNames )
-
-					debug( msg .. ", device #" .. tostring(newDeviceId) .. "(" .. deviceName .. ") has been created", "createDevices" )
-					hasBeenCreated = true
 				end
 				DiscoveredDevices.remove( protocol, protocolDeviceId )
 			else
