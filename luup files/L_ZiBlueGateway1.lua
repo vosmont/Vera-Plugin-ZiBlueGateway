@@ -17,7 +17,7 @@ local status, json = pcall( require, "dkjson" )
 
 _NAME = "ZiBlueGateway"
 _DESCRIPTION = "ZiBlue gateway for the Vera"
-_VERSION = "0.6"
+_VERSION = "0.7"
 _AUTHOR = "vosmont"
 
 
@@ -141,7 +141,7 @@ local DEVICE = {
 			[ "OFF" ] = function( ziBlueDevice, feature )
 				DeviceHelper.setTripped( ziBlueDevice, feature, "0" )
 			end,
-			[ "alarm" ] = function( ziBlueDevice, feature )
+			[ "Alarm" ] = function( ziBlueDevice, feature )
 				DeviceHelper.setTripped( ziBlueDevice, feature, "1" )
 			end,
 			[ "Tamper" ] = function( ziBlueDevice, feature )
@@ -1013,14 +1013,14 @@ DeviceHelper = {
 		local deviceId = feature.deviceId
 		local formerStatus = Variable.get( deviceId, VARIABLE.SWITCH_POWER ) or "0"
 		local msg = "ZiBlue device '" .. _getZiBlueId( ziBlueDevice, feature ) .. "'"
-		if ( feature.settings[ "receiver" ] ) then
+		if ( feature.settings.receiver ) then
 			msg = msg .. " (receiver)"
 		end
 
 		-- Pulse
-		local isPulse = ( feature.settings[ "pulse" ] == true )
+		local isPulse = ( feature.settings.pulse == true )
 		-- Toggle
-		local isToggle = ( feature.settings[ "toggle" ] == true )
+		local isToggle = ( feature.settings.toggle == true )
 		if ( isToggle or ( status == nil ) or ( status == "" ) ) then
 			if isPulse then
 				-- Always ON in pulse and toggle mode
@@ -1076,18 +1076,19 @@ DeviceHelper = {
 		end
 
 		-- Send command if needed
-		if ( ( feature.settings[ "receiver" ] ) and not ( noAction == true ) ) then
+		if ( feature.settings.receiver and not ( noAction == true ) ) then
 			local cmd
 			if ( status == "1" ) then
 				cmd = "ON"
 			else
 				cmd = "OFF"
 			end
-			local qualifier = feature.settings[ "qualifier" ] and ( " QUALIFIER " .. ( ( feature.settings[ "qualifier" ] == "1" ) and "1" or "0" ) ) or ""
+			local qualifier = feature.settings.qualifier and ( " QUALIFIER " .. ( ( feature.settings.qualifier == "1" ) and "1" or "0" ) ) or ""
+			local burst = feature.settings.burst and ( " BURST " .. feature.settings.burst ) or ""
 			if ( loadLevel and DeviceHelper.isDimmable( ziBlueDevice, feature, true ) ) then 
-				Network.send( "ZIA++DIM ID " .. ziBlueDevice.protocolDeviceId .. " " .. ziBlueDevice.protocol .. " %" .. tostring(loadLevel) .. qualifier )
+				Network.send( "ZIA++DIM ID " .. ziBlueDevice.protocolDeviceId .. " " .. ziBlueDevice.protocol .. " %" .. tostring(loadLevel) .. qualifier .. burst )
 			else
-				Network.send( "ZIA++" .. cmd .. " ID " .. ziBlueDevice.protocolDeviceId .. " " .. ziBlueDevice.protocol .. qualifier )
+				Network.send( "ZIA++" .. cmd .. " ID " .. ziBlueDevice.protocolDeviceId .. " " .. ziBlueDevice.protocol .. qualifier .. burst )
 			end
 		end
 
@@ -1177,18 +1178,19 @@ DeviceHelper = {
 		-- Send command if needed
 		if ( feature.settings.receiver and not ( noAction == true ) ) then
 			local qualifier = feature.settings.qualifier and ( " QUALIFIER " .. ( ( feature.settings.qualifier == "1" ) and "1" or "0" ) ) or ""
+			local burst = feature.settings.burst and ( " BURST " .. feature.settings.burst ) or ""
 			if ( loadLevel > 0 ) then
 				if not DeviceHelper.isDimmable( ziBlueDevice, feature, true ) then
 					if ( loadLevel == 100 ) then
-						Network.send( "ZIA++ON ID " .. ziBlueDevice.protocolDeviceId .. " " .. ziBlueDevice.protocol .. qualifier )
+						Network.send( "ZIA++ON ID " .. ziBlueDevice.protocolDeviceId .. " " .. ziBlueDevice.protocol .. qualifier .. burst )
 					else
 						debug( "This protocol does not support DIM", "DeviceHelper.setLoadLevel" )
 					end
 				else
-					Network.send( "ZIA++DIM ID " .. ziBlueDevice.protocolDeviceId .. " " .. ziBlueDevice.protocol .. " %" .. tostring(loadLevel) .. qualifier )
+					Network.send( "ZIA++DIM ID " .. ziBlueDevice.protocolDeviceId .. " " .. ziBlueDevice.protocol .. " %" .. tostring(loadLevel) .. qualifier .. burst )
 				end
 			else
-				Network.send( "ZIA++OFF ID " .. ziBlueDevice.protocolDeviceId .. " " .. ziBlueDevice.protocol .. qualifier )
+				Network.send( "ZIA++OFF ID " .. ziBlueDevice.protocolDeviceId .. " " .. ziBlueDevice.protocol .. qualifier .. burst )
 			end
 		end
 
@@ -1324,7 +1326,8 @@ DeviceHelper = {
 				-- "My" fonction for RTS
 				if ( feature.settings.receiver and not ( noAction == true ) ) then
 					debug( "RTS 'My' function", "DeviceHelper.moveShutter" )
-					Network.send( "ZIA++DIM ID " .. ziBlueDevice.protocolDeviceId .. " RTS %4 QUALIFIER 0" )
+					local burst = feature.settings.burst and ( " BURST " .. feature.settings.burst ) or ""
+					Network.send( "ZIA++DIM ID " .. ziBlueDevice.protocolDeviceId .. " RTS %4 QUALIFIER 0" .. burst )
 				end
 			else
 				debug( "Stop is not managed for the protocol " .. ziBlueDevice.protocol, "DeviceHelper.moveShutter" )
@@ -1376,6 +1379,7 @@ Message = {
 				elseif ( data ~= nil ) then
 					feature.state = data
 				end
+				ziBlueDevice.lastUpdate = os.time()
 				local deviceTypeInfos = _getDeviceTypeInfos( feature.deviceType )
 				if ( deviceTypeInfos == nil ) then
 					error( msg .. " - Device type " .. feature.deviceType .. " is unknown", "Message.process" )
@@ -1887,11 +1891,10 @@ ZiBlueDevices = {
 						g_deviceIdsById[ id ] = {}
 					end
 					--
-					if ( deviceNum == 1 ) then
+					if ( ( deviceNum == 1 ) or not ziBlueDevice.mainDeviceId ) then
 						-- Main device
 						ziBlueDevice.mainDeviceId = deviceId
-					elseif not ziBlueDevice.mainDeviceId then
-						ziBlueDevice.mainDeviceId = deviceId
+						ziBlueDevice.mainRoomId = device.room_num
 					end
 					g_deviceIdsById[ id ][ deviceNum ] = deviceId
 					-- Features
@@ -1924,8 +1927,7 @@ ZiBlueDevices = {
 								deviceName = device.description,
 								deviceType = device.device_type,
 								deviceTypeName = deviceTypeInfos and deviceTypeInfos.name or "UNKOWN",
-								lastCommand = 0,
-								lastCommandReceiveTime = 0,
+								roomId = device.room_num,
 								settings = settings,
 								association = Association.get( Variable.get( deviceId, VARIABLE.ASSOCIATION ) )
 							}
