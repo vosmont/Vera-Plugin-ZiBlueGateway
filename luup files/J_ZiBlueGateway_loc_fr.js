@@ -34,7 +34,7 @@ Utils.initTokens( {
 	"ziblue_add_new_device_teach_explanation": "En fonction du récepteur/actionneur, l'apprentissage peut être différent. Tout d'abord, positionnez le récepteur en mode apprentissage, puis cliquez sur le bouton ' 'Apprendre' (vous n'aurez peut-être que 10 secondes).",
 	"ziblue_add_new_device_teach_parrot_explanation": "Pressez le bouton 'Teach' pour positionner le dongle en mode capture. Placez l'émetteur à apprendre à 2-3m et faites le émettre des trames.<br/>Diminuez graduellement la distance s'il n'y a pas de résultat. Un module trop près donnera des résultats décevants.<br/>La trame doit être capturée 2 fois (1: Lent clignotement bleu puis 2: Clignotement rapide bleu ; Apprentissage réussi: lumière ROSE, apprentissage raté: lumière ROUGE).",
 	"ziblue_add_new_device_test_title": "Test",
-	"ziblue_add_new_device_test_explanation": "Vous pouvez utiliser les boutons 'ON' et 'OFF' pour tester que l'apprentissage est correct.",
+	"ziblue_add_new_device_test_explanation": "Vous pouvez utiliser les boutons 'ON' et 'OFF' pour vérifier que l'apprentissage est correctement effectué.",
 	"ziblue_add_new_device_validate_title": "Validation",
 	"ziblue_add_new_device_validate_explanation": "Si tout est OK, vous pouvez valider en créant le nouveau module (émetteur virtuel).",
 	"ziblue_warning_teach_in_not_done": "L'apprentissage du récepteur n'a pas été fait. Voulez vous continuer à créer le nouveau module ?",

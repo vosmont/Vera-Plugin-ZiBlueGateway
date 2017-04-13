@@ -17,7 +17,7 @@ local status, json = pcall( require, "dkjson" )
 
 _NAME = "ZiBlueGateway"
 _DESCRIPTION = "ZiBlue gateway for the Vera"
-_VERSION = "0.7"
+_VERSION = "0.8"
 _AUTHOR = "vosmont"
 
 
@@ -510,9 +510,15 @@ end
 local ZIBLUE_SEND_PROTOCOL = {
 	VISONIC433 = { name = "Visonic 433Mhz (PowerCode)" },
 	VISONIC868 = { name = "Visonic 868Mhz (PowerCode)" },
-	CHACON = { name = "Chacon 433Mhz" },
+	CHACON = {
+		name = "Chacon 433Mhz",
+		deviceTypes = { "BINARY_LIGHT", "SHUTTER" }
+	},
 	DOMIA = { name = "Domia 433Mhz" },
-	X10 = { name = "X10 433Mhz" },
+	X10 = {
+		name = "X10 433Mhz",
+		deviceTypes = { "BINARY_LIGHT", "SHUTTER" }
+	},
 	X2D433 = { name = "X2D 433Mhz" },
 	X2D868 = { name = "X2D 868Mhz" },
 	X2DSHUTTER = { name = "X2D Shutter 868Mhz" },
