@@ -3,7 +3,7 @@
 /**
  * This file is part of the plugin ZiBlueGateway.
  * https://github.com/vosmont/Vera-Plugin-ZiBlueGateway
- * Copyright (c) 2017 Vincent OSMONT
+ * Copyright (c) 2018 Vincent OSMONT
  * This code is released under the MIT License, see LICENSE.
  */
 
@@ -22,7 +22,7 @@
 	};
 	// Custom CSS injection
 	Utils.injectCustomCSS = function( nameSpace, css ) {
-		if ( $( "#custom-css-" + nameSpace ).size() === 0 ) {
+		if ( $( "#custom-css-" + nameSpace ).length === 0 ) {
 			Utils.logDebug( "Injects custom CSS for " + nameSpace );
 			var pluginStyle = $( '<style id="custom-css-' + nameSpace + '">' );
 			pluginStyle
@@ -45,7 +45,11 @@
 			api.performActionOnDevice( deviceId, service, action, {
 				actionArguments: actionArguments,
 				onSuccess: function( response ) {
-					var result = JSON.parse( response.responseText );
+					var result;
+					try {
+						result = JSON.parse( response.responseText );
+					} catch( err ) {
+					}
 					if ( !$.isPlainObject( result )
 						|| !$.isPlainObject( result[ "u:" + action + "Response" ] )
 						|| (
@@ -112,34 +116,50 @@
 		// Prepare loaders
 		var loaders = [];
 		$.each( fileNames, function( index, fileName ) {
-			if ( !_resourceLoaded[ fileName ] ) {
-				loaders.push(
-					$.ajax( {
-						url: (fileName.indexOf( "http" ) === 0 ? fileName: api.getDataRequestURL().replace( "/data_request", "" ) + '/' + fileName),
-						dataType: "script",
-						beforeSend: function( jqXHR, settings ) {
-							jqXHR.fileName = fileName;
-						}
-					} )
-				);
+			var parts = fileName.split(";");
+			var name = parts[0].trim();
+			var fileName = ( parts[1] ? parts[1] : parts[0] ).trim();
+			if ( fileName.indexOf( "/" ) !== 0 ) {
+				// Local file on the Vera
+				fileName = api.getDataRequestURL().replace( "/data_request", "/" ) + fileName;
+			}
+			if ( !_resourceLoaded[ name ] ) {
+				var parts = name.split(".");
+				switch( parts.pop() ) {
+					case 'css':
+						var cssLink = $( "<link rel='stylesheet' type='text/css' href='" + fileName + "'>" );
+						$( "head" ).append( cssLink );
+						_resourceLoaded[ name ] = true;
+						break;
+					case 'js':
+						loaders.push(
+							$.ajax( {
+								url: fileName,
+								dataType: "script",
+								beforeSend: function( jqXHR, settings ) {
+									jqXHR.name = name;
+								}
+							} )
+						);
+				}
 			}
 		} );
 		// Execute loaders
 		$.when.apply( $, loaders )
 			.done( function( xml, textStatus, jqxhr ) {
 				if (loaders.length === 1) {
-					_resourceLoaded[ jqxhr.fileName ] = true;
+					_resourceLoaded[ jqxhr.name ] = true;
 				} else if (loaders.length > 1) {
 					// arguments : [ [ xml, textStatus, jqxhr ], ... ]
 					for (var i = 0; i < arguments.length; i++) {
 						jqxhr = arguments[ i ][ 2 ];
-						_resourceLoaded[ jqxhr.fileName ] = true;
+						_resourceLoaded[ jqxhr.name ] = true;
 					}
 				}
 				d.resolve();
 			} )
 			.fail( function( jqxhr, textStatus, errorThrown  ) {
-				Utils.logError( 'Load "' + jqxhr.fileName + '" : ' + textStatus + ' - ' + errorThrown );
+				Utils.logError( 'Load "' + jqxhr.name + '" : ' + textStatus + ' - ' + errorThrown );
 				d.reject();
 			} );
 		return d.promise();
@@ -160,108 +180,14 @@
 
 
 /**
- * ALTUI fixes
+ * Plugin
  */
-( function( $ ) {
-	if ( window.Localization ) {
-		Utils.getLangString = function( token, defaultValue ) { return _T(token) || defaultValue; };
-
-		Utils.initTokens( {
-			"ui7_device_type_temperature_sensor": "Temperature sensor",
-			"ui7_device_type_humidity_sensor": "Hygrometry sensor",
-			"ui7_device_type_barometer_sensor": "Barometer sensor",
-			"ui7_device_type_power_meter": "Power Meter",
-			"ui7_device_type_motion_sensor":  "Motion sensor",
-			"ui7_device_type_door_sensor": "Door sensor",
-			"ui7_device_type_smoke_sensor": "Smoke sensor",
-			"ui7_device_type_binary_light": "Switch",
-			"ui7_device_type_dimmable_light": "Dimmable Switch",
-			"ui7_device_type_window_covering": "Window Covering"
-		} );
-	}
-} ) ( jQuery );
-
-
-/**
- * Custom CSS
- * http://www.utf8icons.com/
- */
-Utils.injectCustomCSS( "zibluegateway", '\
-.zibluegateway-panel { position: relative; padding: 5px; }\
-.zibluegateway-panel table { width: 100%; }\
-.zibluegateway-panel th { text-align: center; background-color: #ccc; }\
-.zibluegateway-panel td { padding: 5px; border: 1px solid #ccc; vertical-align: top; }\
-.zibluegateway-panel label { font-weight: normal }\
-.zibluegateway-panel button { display: inline-block; }\
-.zibluegateway-panel button.highlighted { background: #006d46; color: #fff; }\
-.zibluegateway-panel .icon { vertical-align: middle; }\
-.zibluegateway-panel .icon.big { vertical-align: sub; }\
-.zibluegateway-panel .icon:before { font-size: 15px; }\
-.zibluegateway-panel .icon.big:before { font-size: 30px; }\
-.zibluegateway-panel .icon-menu:before { content: "\\25BE"; }\
-.zibluegateway-panel .icon-ok:before { content: "\\2713"; }\
-.zibluegateway-panel .icon-help:before { content: "\\2753"; }\
-.zibluegateway-panel .icon-cancel:before { content: "\\2718"; }\
-.zibluegateway-panel .icon-teach:before { content: "\\270D"; }\
-.zibluegateway-panel .icon-ignore:before { content: "\\2718"; }\
-.zibluegateway-panel .icon-refresh:before { content: "\\267B"; }\
-.zibluegateway-panel .icon-add:before { content: "\\271A"; }\
-.zibluegateway-panel .icon-temperature:before { content: "\\2103"; }\
-.zibluegateway-panel .icon-motion:before { content: "\\2103"; }\
-.zibluegateway-panel .icon-door:before { content: "\\25AF"; }\
-.zibluegateway-panel .icon-button:before { content: "\\25A3"; }\
-.zibluegateway-panel .icon-light:before { content: "\\25CF"; }\
-.zibluegateway-panel .icon-dimmable:before { content: "\\25D0"; }\
-.zibluegateway-panel .icon-shutter:before { content: "\\25A4"; }\
-.zibluegateway-hidden { display: none; }\
-.zibluegateway-error { color:red; }\
-.zibluegateway-explanation { margin: 5px; padding: 5px; border: 1px solid; background: #FFFF88}\
-.zibluegateway-toolbar { height: 25px; text-align: right; margin: 5px; }\
-.zibluegateway-association-room { font-weight: bold; width: 100%; background: #ccc; }\
-div.zibluegateway-association { padding-left: 20px; }\
-div.zibluegateway-association label span { padding: 4px 0 0 2px; }\
-span.zibluegateway-association { margin-right: 5px; }\
-span.zibluegateway-association span { padding: 1px; }\
-.zibluegateway-association-device .ziblue-short-press { color: white; background: orange; border: 1px solid orange; }\
-.zibluegateway-association-device .ziblue-long-press  { color: white; background: red; border: 1px solid red; }\
-.zibluegateway-association-scene .ziblue-short-press  { color: white; background: blue; border: 1px solid blue; }\
-.zibluegateway-association-scene .ziblue-long-press   { color: white; background: green; border: 1px solid green; }\
-.zibluegateway-association-zibluedevice .ziblue-short-press  { color: white; background: purple; border: 1px solid purple; }\
-.ziblue-short-press {}\
-table.zibluegateway-feature-group td { padding: 0px; }\
-.ziblue-long-press { border: red; }\
-.zibluegateway-protocol-name { font-weight: bold; }\
-.zibluegateway-protocol-id { font-weight: bold; }\
-.zibluegateway-device-name { font-weight: bold; }\
-.zibluegateway-feature-name { font-weight: bold; font-style: italic; }\
-.zibluegateway-feature-state { font-style: italic; }\
-#zibluegateway-discovered-devices .zibluegateway-feature-name, #zibluegateway-discovered-devices .zibluegateway-feature-state { margin-left: 10px; }\
-#zibluegateway-device-actions { position: absolute; background: #FFF; border: 2px solid #AAA; white-space: nowrap; }\
-#zibluegateway-device-actions td { padding: 5px; }\
-#zibluegateway-device-actions button { margin: 2px; }\
-#zibluegateway-device-association {\
-	position: absolute; top: 0px; left: 0px;\
-	width: 100%;\
-	background: #FFF; border: 2px solid #AAA;\
-}\
-#zibluegateway-device-params {\
-	position: absolute; top: 0px; left: 0px;\
-	width: 100%;\
-	background: #FFF; border: 2px solid #AAA;\
-}\
-#zibluegateway-donate { text-align: center; width: 70%; margin: auto; }\
-#zibluegateway-donate form { height: 50px; }\
-.zibluegateway-feature-group td { border: 0 }\
-.zibluegateway-setting { margin-top: 10px; border-radius: 25px; padding: 1px 25px; text-align: left; }\
-.zibluegateway-setting span { display: inline-block; width: 30%; }\
-h3 div.ui-widget-content { color: #fff !important; background-color: #00a652 !important; }');
-
-
-
 var ZiBlueGateway = ( function( api, $ ) {
-	var _uuid = "f3737884-38bd-4d9b-983d-3fafac1ce9b4";
-	var ZIBLUEGATEWAY_SID = "urn:upnp-org:serviceId:ZiBlueGateway1";
-	var ZIBLUEDEVICE_SID = "urn:upnp-org:serviceId:ZiBlueDevice1";
+	var _prefix = "ziblue";
+	var _pluginName = "ZiBlueGateway";
+	var _uuid = "51d7cd82-355e-4dad-b5c9-100a74133220";
+	var PLUGIN_SID = "urn:upnp-org:serviceId:ZiBlueGateway1";
+	var PLUGIN_CHILD_SID = "urn:upnp-org:serviceId:ZiBlueDevice1";
 	var _deviceId = null;
 	var _lastUpdate = 0;
 	var _indexFeatures = {}, _indexDevices = {};
@@ -272,18 +198,32 @@ var ZiBlueGateway = ( function( api, $ ) {
 	var _devicesLastRefresh = 0, _discoveredDevicesLastRefresh = 0;
 
 	/**
+	 * Resources
+	 */
+	function _loadResourcesAsync() {
+		var resources = [ 'J_' + _pluginName + '1.css' ];
+		if ( $( 'link[rel="stylesheet"][href*="font-awesome"]' ).length === 0 ) {
+			resources.push( 'font-awesome.css;//maxcdn.bootstrapcdn.com/font-awesome/4.7.0/css/font-awesome.min.css' );
+		}
+		return Utils.loadResourcesAsync( resources )
+	}
+
+	/**
 	 * Localization
 	 */
-	function _loadLocalization() {
+	function _loadLocalizationAsync() {
 		var d = $.Deferred();
-		Utils.loadResourcesAsync( 'J_ZiBlueGateway_loc_' + Utils.getLanguage() + '.js' )
+		Utils.loadResourcesAsync( 'J_' + _pluginName + '1_loc_' + Utils.getLanguage() + '.js' )
 			.done( function() {
 				d.resolve();
 			})
 			.fail( function() {
 				if ( Utils.getLanguage() !== 'en' ) {
 					// Fallback
-					Utils.loadResourcesAsync( 'J_ZiBlueGateway_loc_en.js' );
+					Utils.loadResourcesAsync( 'J_' + _pluginName + '1_loc_en.js' )
+						.done( function() {
+							d.resolve();
+						});
 				} else {
 					d.reject();
 				}
@@ -292,12 +232,12 @@ var ZiBlueGateway = ( function( api, $ ) {
 	}
 
 	/**
-	 * Get informations on ZiBlue devices
+	 * Get informations on external devices
 	 */
 	function _getDevicesInfosAsync() {
 		var d = $.Deferred();
 		$.ajax( {
-			url: Utils.getDataRequestURL() + "id=lr_ZiBlueGateway&command=getDevicesInfos&output_format=json#",
+			url: Utils.getDataRequestURL() + "id=lr_" + _pluginName + "&command=getDevicesInfos&output_format=json#",
 			dataType: "json"
 		} )
 		.done( function( devicesInfos ) {
@@ -309,7 +249,7 @@ var ZiBlueGateway = ( function( api, $ ) {
 			}
 		} )
 		.fail( function( jqxhr, textStatus, errorThrown ) {
-			Utils.logError( "Get ZiBlue devices infos error : " + errorThrown );
+			Utils.logError( "Get " + _pluginName + " devices infos error : " + errorThrown );
 			d.reject();
 		} );
 		return d.promise();
@@ -328,26 +268,26 @@ var ZiBlueGateway = ( function( api, $ ) {
 	}
 
 	function _showReload( message, onSuccess ) {
-		var html = '<div id="zibluegateway-reload">'
+		var html = '<div id="' + _prefix + '-reload">'
 			+			( message ? '<div>' + message + '</div>' : '' )
-			+			'<div>' + Utils.getLangString( "ziblue_reload_has_to_be_done" ) + '</div>'
+			+			'<div>' + Utils.getLangString( _prefix + "_reload_has_to_be_done" ) + '</div>'
 			+			'<div>'
-			+				'<button type="button" class="zibluegateway-reload">Reload Luup engine</button>'
+			+				'<button type="button" class="' + _prefix + '-reload">Reload Luup engine</button>'
 			+			'</div>'
 			+		'</div>';
 		api.ui.showMessagePopup( html, 0, 0, { onSuccess: onSuccess } );
 
-		$( "#zibluegateway-reload" ).click( function() {
+		$( "#" + _prefix + "-reload" ).click( function() {
 			$.when( api.luReload() )
 				.done( function() {
-					$( "#zibluegateway-reload" ).css({ "display": "none" });
+					$( "#" + _prefix + "-reload" ).css({ "display": "none" });
 				});
 			$( this ).prop( "disabled", true );
 		});
 	}
 
 	// *************************************************************************************************
-	// ZiBlue devices
+	// External devices
 	// *************************************************************************************************
 
 	function _stopDevicesRefresh() {
@@ -372,7 +312,7 @@ var ZiBlueGateway = ( function( api, $ ) {
 			if ( level === 1 ) {
 				pressType = "long";
 			}
-			return	'<span class="zibluegateway-association zibluegateway-association-' + associationType + '" title="' + associationType + ' associated with ' + pressType + ' press">'
+			return	'<span class="' + _prefix + '-association ' + _prefix + '-association-' + associationType + '" title="' + associationType + ' associated with ' + pressType + ' press">'
 				+		'<span class="ziblue-' + pressType + '-press">'
 				+			association[ level ].join( "," )
 				+		'</span>'
@@ -382,11 +322,11 @@ var ZiBlueGateway = ( function( api, $ ) {
 	}
 
 	/**
-	 * Draw and manage ZiBlue device list
+	 * Draw and manage external device list
 	 */
 	function _drawDevicesList() {
 		_stopDevicesRefresh();
-		if ( $( "#zibluegateway-known-devices" ).length === 0 ) {
+		if ( $( "#" + _prefix + "-known-devices" ).length === 0 ) {
 			return;
 		}
 		_indexFeatures = {}; _indexDevices = {};
@@ -407,22 +347,22 @@ var ZiBlueGateway = ( function( api, $ ) {
 					});
 					
 					var html =	'<table><tr>'
-						+			'<th>' + Utils.getLangString( "ziblue_room" ) + '</th>'
-						+			'<th>' + Utils.getLangString( "ziblue_protocol" ) + '</th>'
-						+			'<th>' + Utils.getLangString( "ziblue_id" ) + '</th>'
-						+			'<th>' + Utils.getLangString( "ziblue_signal_quality" ) + '</th>'
-						+			'<th>' + Utils.getLangString( "ziblue_last_update" ) + '</th>'
-						+			'<th>' + Utils.getLangString( "ziblue_feature" ) + '</th>'
-						+			'<th>' + Utils.getLangString( "ziblue_device" ) + '</th>'
-						+			'<th>' + Utils.getLangString( "ziblue_association" ) + '</th>'
-						+			'<th>' + Utils.getLangString( "ziblue_action" ) + '</th>'
+						+			'<th>' + Utils.getLangString( _prefix + "_room" ) + '</th>'
+						+			'<th>' + Utils.getLangString( _prefix + "_protocol" ) + '</th>'
+						+			'<th>' + Utils.getLangString( _prefix + "_id" ) + '</th>'
+						+			'<th>' + Utils.getLangString( _prefix + "_signal_quality" ) + '</th>'
+						+			'<th>' + Utils.getLangString( _prefix + "_last_update" ) + '</th>'
+						+			'<th>' + Utils.getLangString( _prefix + "_feature" ) + '</th>'
+						+			'<th>' + Utils.getLangString( _prefix + "_device" ) + '</th>'
+						+			'<th>' + Utils.getLangString( _prefix + "_association" ) + '</th>'
+						+			'<th>' + Utils.getLangString( _prefix + "_action" ) + '</th>'
 						+		'</tr>';
 					$.each( devicesInfos.devices, function( i, device ) {
 						var rowSpan = ( device.features.length > 1 ? ' rowspan="' + device.features.length + '"' : '' );
 						html += '<tr>'
-							+		'<td class="zibluegateway-room-name"' + rowSpan + '>' + device.roomName + '</td>'
-							+		'<td class="zibluegateway-protocol-name"' + rowSpan + '>' + device.protocol + '</td>'
-							+		'<td class="zibluegateway-protocol-id"' + rowSpan + '>' + device.protocolDeviceId + '</td>'
+							+		'<td class="' + _prefix + '-room-name"' + rowSpan + '>' + device.roomName + '</td>'
+							+		'<td class="' + _prefix + '-protocol-name"' + rowSpan + '>' + device.protocol + '</td>'
+							+		'<td class="' + _prefix + '-protocol-id"' + rowSpan + '>' + device.protocolDeviceId + '</td>'
 							+		'<td' + rowSpan + '>' + ( device.rfQuality >= 0 ? device.rfQuality : '' ) + '</td>'
 							+		'<td' + rowSpan + '>' + _convertTimestampToLocaleString( device.lastUpdate ) + '</td>';
 						var isFirstRow = true;
@@ -451,26 +391,26 @@ var ZiBlueGateway = ( function( api, $ ) {
 								feature.settings = {};
 							}
 							/*feature.settings = {};
-							$.each( ( api.getDeviceStateVariable( feature.deviceId, "urn:upnp-org:serviceId:ZiBlueDevice1", "Setting", { dynamic: false } ) || "" ).split( "," ), function( i, settingName ) {
+							$.each( ( api.getDeviceStateVariable( feature.deviceId, PLUGIN_CHILD_SID, "Setting", { dynamic: false } ) || "" ).split( "," ), function( i, settingName ) {
 								feature.settings[ settingName ] = true;
 							} );*/
 							if ( !isFirstRow ) {
 								html += '<tr>';
 							}
 							html +=	'<td>'
-								//+		'<div class="zibluegateway-device-channel">'
+								//+		'<div class="' + _prefix + '-device-channel">'
 								//
-								+		'<div class="zibluegateway-feature-name">' + feature.name + '</div>'
-								+		( feature.comment ? '<div class="zibluegateway-feature-state">' + feature.comment + '</div>' : '' )
-								+		( feature.state ? '<div class="zibluegateway-feature-state">' + feature.state + '</div>' : '' )
+								+		'<div class="' + _prefix + '-feature-name">' + feature.name + '</div>'
+								+		( feature.comment ? '<div class="' + _prefix + '-feature-state">' + feature.comment + '</div>' : '' )
+								+		( feature.state ? '<div class="' + _prefix + '-feature-state">' + feature.state + '</div>' : '' )
 								+	'</td>';
 
 							if ( feature.deviceId != lastDeviceId ) {
 								lastDeviceId = feature.deviceId;
 								deviceRowSpan = ' rowspan="' + countDevices[ feature.deviceId.toString() ] + '"';
 								html +=	'<td' + deviceRowSpan +'>'
-									//+			'<div class="zibluegateway-device-type">'
-									+		'<div><span class="zibluegateway-device-name">' + feature.deviceName + '</span> (#' + feature.deviceId + ')</div>'
+									//+			'<div class="' + _prefix + '-device-type">'
+									+		'<div><span class="' + _prefix + '-device-name">' + feature.deviceName + '</span> (#' + feature.deviceId + ')</div>'
 									+		'<div>'
 									+				Utils.getLangString( feature.deviceTypeName )
 									+				( device.isNew ? ' <span style="color:red">NEW</span>' : '' )
@@ -489,19 +429,18 @@ var ZiBlueGateway = ( function( api, $ ) {
 									+	'<td' + deviceRowSpan +' align="center">'
 									//+		( !device.isNew && ( feature.settings.button || feature.settings.receiver ) ?
 									+		( !device.isNew ?
-												'<span class="zibluegateway-actions icon big icon-menu" data-product-id="' + productId + '" data-feature-name="' + feature.name + '"></span>' 
+												'<i class="' + _prefix + '-actions fa fa-caret-down fa-lg" aria-hidden="true" data-product-id="' + productId + '" data-feature-name="' + feature.name + '"></i>'
 												: '' )
 									+	'</td>';
 							}
-
 							html +=	'</tr>';
 							isFirstRow = false;
 						} );
 					});
 					html += '</table>';
-					$("#zibluegateway-known-devices").html( html );
+					$("#" + _prefix + "-known-devices").html( html );
 				} else {
-					$("#zibluegateway-known-devices").html( Utils.getLangString( "ziblue_no_device" ) );
+					$("#" + _prefix + "-known-devices").html( Utils.getLangString( _prefix + "_no_device" ) );
 				}
 				_devicesLastRefresh = Date.now();
 				_resumeDevicesRefresh();
@@ -509,7 +448,7 @@ var ZiBlueGateway = ( function( api, $ ) {
 	}
 
 	/**
-	 * Show the actions that can be done on a ZiBlue device
+	 * Show the actions that can be done on an external device
 	 */
 	function _showDeviceActions( position, settings ) {
 		_stopDevicesRefresh();
@@ -517,19 +456,19 @@ var ZiBlueGateway = ( function( api, $ ) {
 				+		'<tr>'
 				+			'<td>'
 				+				( settings.button ?
-								'<button type="button" class="zibluegateway-show-association">Associate</button>'
+								'<button type="button" class="' + _prefix + '-show-association">Associate</button>'
 								: '')
-				+				'<button type="button" class="zibluegateway-show-params">Params</button>'
+				+				'<button type="button" class="' + _prefix + '-show-params">Params</button>'
 				+			'</td>';
 		if ( settings.receiver ) {
 			html +=			'<td bgcolor="#FF0000">'
-				+				'<button type="button" class="zibluegateway-teach">Teach in</button>'
-				//+				'<button type="button" class="zibluegateway-clear">Clear</button>'
+				+				'<button type="button" class="' + _prefix + '-teach">Teach in</button>'
+				//+				'<button type="button" class="' + _prefix + '-clear">Clear</button>'
 				+			'</td>';
 		}
 		html +=			'</tr>'
 			+		'</table>';
-		var $actions = $( "#zibluegateway-device-actions" );
+		var $actions = $( "#" + _prefix + "-device-actions" );
 		$actions
 			.html( html )
 			.css( {
@@ -544,14 +483,14 @@ var ZiBlueGateway = ( function( api, $ ) {
 	 */
 	function _showDeviceAssociation( productId, feature ) {
 		_stopDevicesRefresh();
-		var html = '<h1>' + Utils.getLangString( "ziblue_association" ) + '</h1>'
+		var html = '<h1>' + Utils.getLangString( _prefix + "_association" ) + '</h1>'
 				+	'<h3>' + productId + ' - ' + feature.name + ' - ' + feature.deviceName + ' (#' + feature.deviceId + ')</h3>'
 				+	'<div class="scenes_section_delimiter"></div>'
-				+	'<div class="zibluegateway-toolbar">'
-				+		'<button type="button" class="zibluegateway-help"><span class="icon icon-help"></span>' + Utils.getLangString( "ziblue_help" ) + '</button>'
+				+	'<div class="' + _prefix + '-toolbar">'
+				+		'<button type="button" class="' + _prefix + '-help"><i class="fa fa-question fa-lg text-info" aria-hidden="true"></i>&nbsp;' + Utils.getLangString( _prefix + "_help" ) + '</button>'
 				+	'</div>'
-				+	'<div class="zibluegateway-explanation zibluegateway-hidden">'
-				+		Utils.getLangString( "ziblue_explanation_association" )
+				+	'<div class="' + _prefix + '-explanation ' + _prefix + '-hidden">'
+				+		Utils.getLangString( _prefix + "_explanation_association" )
 				+	'</div>';
 
 		// Get compatible devices
@@ -561,11 +500,11 @@ var ZiBlueGateway = ( function( api, $ ) {
 			if ( device.id == feature.deviceId ) {
 				return;
 			}
-			// Check if device is a ZiBlue device with same protocol
-			var isZiBlue = false;
+			// Check if device is an external device with same protocol
+			var isExternal = false;
 			if ( device.id_parent === _deviceId ) {
 				if ( _indexDevices[ device.id.toString() ] == protocol ) {
-					isZiBlue = true;
+					isExternal = true;
 				}
 			}
 			// Check if device is compatible
@@ -577,18 +516,18 @@ var ZiBlueGateway = ( function( api, $ ) {
 					break;
 				}
 			}
-			if ( !isZiBlue && !isCompatible ) {
+			if ( !isExternal && !isCompatible ) {
 				return;
 			}
 			
 			var room = ( device.room ? api.getRoomObject( device.room ) : null );
-			if ( isZiBlue ) {
+			if ( isExternal ) {
 				devices.push( {
 					"id": device.id,
 					"roomName": ( room ? room.name : "_No room" ),
 					"name": "(ZiBlue) " + device.name,
 					"type": 3,
-					"isZiBlue": isZiBlue
+					"isExternal": isExternal
 				} );
 			} else {
 				devices.push( {
@@ -596,7 +535,7 @@ var ZiBlueGateway = ( function( api, $ ) {
 					"roomName": ( room ? room.name : "_No room" ),
 					"name": device.name,
 					"type": 2,
-					"isZiBlue": isZiBlue
+					"isExternal": isExternal
 				} );
 			}
 		} );
@@ -638,11 +577,11 @@ var ZiBlueGateway = ( function( api, $ ) {
 		$.each( devices, function( i, device ) {
 			if ( device.roomName !== currentRoomName ) {
 				currentRoomName = device.roomName;
-				html += '<div class="zibluegateway-association-room">' +  device.roomName + '</div>';
+				html += '<div class="' + _prefix + '-association-room">' +  device.roomName + '</div>';
 			}
 			if ( device.type === 1 ) {
 				// Scene
-				html += '<div class="zibluegateway-association zibluegateway-association-scene" data-scene-id="' + device.id + '">'
+				html += '<div class="' + _prefix + '-association ' + _prefix + '-association-scene" data-scene-id="' + device.id + '">'
 					+		'<label>'
 					+			_getCheckboxHtml( device.id, feature.association.scenes, 0 )
 					//+			_getCheckboxHtml( device.id, feature.association.scenes, 1 )
@@ -651,7 +590,7 @@ var ZiBlueGateway = ( function( api, $ ) {
 					+	'</div>';
 			} else if ( device.type === 3 ) {
 				// ZiBlue : declared association
-				html += '<div class="zibluegateway-association zibluegateway-association-zibluedevice" data-device-id="' + device.id + '">'
+				html += '<div class="ziblue-association ziblue-association-zibluedevice" data-device-id="' + device.id + '">'
 					+		'<label>'
 					+			_getCheckboxHtml( device.id, feature.association.ziBlueDevices, 0 )
 					+			'&nbsp;' + device.name + ' (#' + device.id + ')'
@@ -659,7 +598,7 @@ var ZiBlueGateway = ( function( api, $ ) {
 					+	'</div>';
 			} else {
 				// Classic device (e.g. Z-wave)
-				html += '<div class="zibluegateway-association zibluegateway-association-device" data-device-id="' + device.id + '">'
+				html += '<div class="' + _prefix + '-association ' + _prefix + '-association-device" data-device-id="' + device.id + '">'
 					+		'<label>'
 					+			_getCheckboxHtml( device.id, feature.association.devices, 0 )
 					//+			_getCheckboxHtml( device.id, feature.association.devices, 1 )
@@ -669,25 +608,25 @@ var ZiBlueGateway = ( function( api, $ ) {
 			}
 		} );
 
-		html += '<div class="zibluegateway-toolbar">'
-			+		'<button type="button" class="zibluegateway-cancel"><span class="icon icon-cancel"></span>Cancel</button>'
-			+		'<button type="button" class="zibluegateway-associate"><span class="icon icon-ok"></span>Associate</button>'
+		html += '<div class="' + _prefix + '-toolbar">'
+			+		'<button type="button" class="' + _prefix + '-cancel"><i class="fa fa-times fa-lg text-danger" aria-hidden="true"></i>&nbsp;'  + Utils.getLangString( _prefix + "_cancel" ) + '</button>'
+			+		'<button type="button" class="' + _prefix + '-associate"><i class="fa fa-check fa-lg text-success" aria-hidden="true"></i>&nbsp;'  + Utils.getLangString( _prefix + "_confirm" ) + '</button>'
 			+	'</div>';
 
-		$( "#zibluegateway-device-association" )
+		$( "#" + _prefix + "-device-association" )
 			.html( html )
 			.css( {
 				"display": "block"
 			} );
 
 		_formerScrollTopPosition = $( window ).scrollTop();
-		$( window ).scrollTop( $( "#zibluegateway-known-panel" ).offset().top - 150 );
+		$( window ).scrollTop( $( "#" + _prefix + "-known-panel" ).offset().top - 150 );
 	}
 	function _hideDeviceAssociation() {
-		$( "#zibluegateway-device-association" )
+		$( "#" + _prefix + "-device-association" )
 			.css( {
 				"display": "none",
-				"min-height": $( "#zibluegateway-known-panel" ).height()
+				"min-height": $( "#" + _prefix + "-known-panel" ).height()
 			} );
 		if ( _formerScrollTopPosition > 0 ) {
 			$( window ).scrollTop( _formerScrollTopPosition );
@@ -696,24 +635,24 @@ var ZiBlueGateway = ( function( api, $ ) {
 	function _setDeviceAssociation() {
 		function _getEncodedAssociation() {
 			var associations = [];
-			$("#zibluegateway-device-association .zibluegateway-association-device input:checked").each( function() {
-				var deviceId = $( this ).parents( ".zibluegateway-association-device" ).data( "device-id" );
+			$("#" + _prefix + "-device-association ." + _prefix + "-association-device input:checked").each( function() {
+				var deviceId = $( this ).parents( "." + _prefix + "-association-device" ).data( "device-id" );
 				if ( $( this ).parent().hasClass( "ziblue-long-press" ) ) {
 					associations.push( "+" + deviceId );
 				} else {
 					associations.push( deviceId );
 				}
 			});
-			$("#zibluegateway-device-association .zibluegateway-association-scene input:checked").each( function() {
-				var sceneId = $( this ).parents( ".zibluegateway-association-scene" ).data( "scene-id" );
+			$("#" + _prefix + "-device-association ." + _prefix + "-association-scene input:checked").each( function() {
+				var sceneId = $( this ).parents( "." + _prefix + "-association-scene" ).data( "scene-id" );
 				if ( $( this ).parent().hasClass( "ziblue-long-press" ) ) {
 					associations.push( "+*" + sceneId );
 				} else {
 					associations.push( "*" + sceneId );
 				}
 			});
-			$("#zibluegateway-device-association .zibluegateway-association-zibluedevice input:checked").each( function() {
-				var deviceId = $( this ).parents( ".zibluegateway-association-zibluedevice" ).data( "device-id" );
+			$("#" + _prefix + "-device-association ." + _prefix + "-association-zibluedevice input:checked").each( function() {
+				var deviceId = $( this ).parents( "." + _prefix + "-association-zibluedevice" ).data( "device-id" );
 				associations.push( "%" + deviceId );
 			});
 			return associations.join( "," );
@@ -727,31 +666,31 @@ var ZiBlueGateway = ( function( api, $ ) {
 	}
 
 	/**
-	 * Show parameters for a ZiBlue device
+	 * Show parameters for an external device
 	 */
 	function _showDeviceParams( productId, feature ) {
 		_stopDevicesRefresh();
-		var html = '<h1>' + Utils.getLangString( "ziblue_param" ) + '</h1>'
+		var html = '<h1>' + Utils.getLangString( _prefix + "_param" ) + '</h1>'
 				+	'<h3>' + productId + ' - ' + feature.deviceName + ' (#' + feature.deviceId + ')</h3>'
 				+	'<div class="scenes_section_delimiter"></div>'
-				+	'<div class="zibluegateway-toolbar">'
-				+		'<button type="button" class="zibluegateway-help"><span class="icon icon-help"></span>' + Utils.getLangString( "ziblue_help" ) + '</button>'
+				+	'<div class="' + _prefix + '-toolbar">'
+				+		'<button type="button" class="' + _prefix + '-help"><i class="fa fa-question fa-lg text-info" aria-hidden="true"></i>&nbsp;' + Utils.getLangString( _prefix + "_help" ) + '</button>'
 				+	'</div>'
-				+	'<div class="zibluegateway-explanation zibluegateway-hidden">'
-				+		Utils.getLangString( "ziblue_explanation_param" )
+				+	'<div class="' + _prefix + '-explanation ' + _prefix + '-hidden">'
+				+		Utils.getLangString( _prefix + "_explanation_param" )
 				+	'</div>';
 
 		// Button
 		html += '<h3>'
 			+		_getSettingHtml({
 						type: "checkbox",
-						className: "zibluegateway-hider",
+						className: _prefix + "-hider",
 						variable: "button",
 						name: "Button",
 						value: feature.settings.button
 					})
 			+	'</h3>'
-			+	'<div class="zibluegateway-hideable"' + ( !feature.settings.button ? ' style="display: none;"' : '' ) + '>';
+			+	'<div class="' + _prefix + '-hideable"' + ( !feature.settings.button ? ' style="display: none;"' : '' ) + '>';
 		$.each( [ [ 'pulse', 'Pulse' ], [ 'toggle', 'Toggle' ] ], function( i, param ) {
 			html += _getSettingHtml({
 				type: "checkbox",
@@ -766,13 +705,13 @@ var ZiBlueGateway = ( function( api, $ ) {
 		html += '<h3>'
 			+		_getSettingHtml({
 						type: "checkbox",
-						className: "zibluegateway-hider",
+						className: _prefix + "-hider",
 						variable: "receiver",
 						name: "Receiver",
 						value: feature.settings.receiver
 					})
 			+	'</h3>'
-			+	'<div class="zibluegateway-hideable"' + ( !feature.settings.receiver ? ' style="display: none;"' : '' ) + '>';
+			+	'<div class="' + _prefix + '-hideable"' + ( !feature.settings.receiver ? ' style="display: none;"' : '' ) + '>';
 		$.each( [ [ 'qualifier', 'Qualifier' ], [ 'burst', 'Burst' ] ], function( i, param ) {
 			html += _getSettingHtml({
 				type: "string",
@@ -798,37 +737,37 @@ var ZiBlueGateway = ( function( api, $ ) {
 		});
 		if ( specificHtml != '' ) {
 			html += '<h3>'
-			+			'<div class="zibluegateway-setting ui-widget-content ui-corner-all">'
+			+			'<div class="' + _prefix + '-setting ui-widget-content ui-corner-all">'
 			+				'Specific'
 			+			'</div>'
 			+		'</h3>'
 			+		specificHtml;
 		}
 
-		html += '<div class="zibluegateway-toolbar">'
-			+		'<button type="button" class="zibluegateway-cancel"><span class="icon icon-cancel"></span>Cancel</button>'
-			+		'<button type="button" class="zibluegateway-set"><span class="icon icon-ok"></span>Set</button>'
+		html += '<div class="' + _prefix + '-toolbar">'
+			+		'<button type="button" class="' + _prefix + '-cancel"><i class="fa fa-times fa-lg text-danger" aria-hidden="true"></i>&nbsp;' + Utils.getLangString( _prefix + "_cancel" ) + '</button>'
+			+		'<button type="button" class="' + _prefix + '-set"><i class="fa fa-check fa-lg text-success" aria-hidden="true"></i>&nbsp;'  + Utils.getLangString( _prefix + "_confirm" ) + '</button>'
 			+	'</div>';
 
-		$( "#zibluegateway-device-params" )
+		$( "#" + _prefix + "-device-params" )
 			.html( html )
 			.data( 'feature', feature )
 			.css( {
 				"display": "block",
-				"height": $( "#zibluegateway-known-panel" ).height()
+				"min-height": $( "#" + _prefix + "-known-panel" ).height()
 			} )
-			.on( "change", ".zibluegateway-hider", function() {
+			.on( "change", "." + _prefix + "-hider", function() {
 				var hasToBeVisible = $( this ).is( ':checkbox' ) ? $( this ).is( ':checked' ) : true;
 				$( this ).parent().parent()
-					.next( ".zibluegateway-hideable" )
+					.next( "." + _prefix + "-hideable" )
 						.css({ 'display': ( hasToBeVisible ? "block": "none" ) });
 			});
 
 		_formerScrollTopPosition = $( window ).scrollTop();
-		$( window ).scrollTop( $( "#zibluegateway-known-panel" ).offset().top - 150 );
+		$( window ).scrollTop( $( "#" + _prefix + "-known-panel" ).offset().top - 150 );
 	}
 	function _hideDeviceParams() {
-		$( "#zibluegateway-device-params" )
+		$( "#" + _prefix + "-device-params" )
 			.css( {
 				"display": "none"
 			} );
@@ -837,10 +776,11 @@ var ZiBlueGateway = ( function( api, $ ) {
 		}
 	}
 	function _setDeviceParams() {
-		var feature = $( '#zibluegateway-device-params' ).data( 'feature' );
-		$( '#zibluegateway-device-params .zibluegateway-setting-value' ).each( function() {
-			var settingName = $( this ).data( 'setting' );
-			var settingValue = $( this ).is( ':checkbox' ) ? $( this ).is( ':checked' ) : $( this ).val();
+		var feature = $( "#" + _prefix + "-device-params" ).data( "feature" );
+		feature.settings = {};
+		$( "#" + _prefix + "-device-params ." + _prefix + "-setting-value:visible" ).each( function() {
+			var settingName = $( this ).data( "setting" );
+			var settingValue = $( this ).is( ":checkbox" ) ? $( this ).is( ":checked" ) : $( this ).val();
 			if ( settingName && ( settingValue !== "" ) ) {
 				feature.settings[ settingName ] = settingValue;
 			}
@@ -853,7 +793,7 @@ var ZiBlueGateway = ( function( api, $ ) {
 			}
 		});
 		$.when(
-			Utils.setDeviceStateVariablePersistent( feature.deviceId, "urn:upnp-org:serviceId:ZiBlueDevice1", "Setting", setting.join( "," ) ),
+			Utils.setDeviceStateVariablePersistent( feature.deviceId, PLUGIN_CHILD_SID, "Setting", setting.join( "," ) ),
 			_performActionRefresh()
 		)
 			.done( function() {
@@ -863,51 +803,50 @@ var ZiBlueGateway = ( function( api, $ ) {
 	}
 
 	/**
-	 * Show ZiBlue devices
+	 * Show external devices
 	 */
 	function _showDevices( deviceId ) {
 		if ( deviceId ) {
 			_deviceId = deviceId;
 		}
 		try {
-			$.when( _loadLocalization() ).then( function() {
+			$.when( _loadResourcesAsync(), _loadLocalizationAsync() ).then( function() {
 				api.setCpanelContent(
-						'<div id="zibluegateway-known-panel" class="zibluegateway-panel">'
-					+		'<h1>' + Utils.getLangString( "ziblue_managed_devices" ) + '</h1>'
+						'<div id="' + _prefix + '-known-panel" class="' + _prefix + '-panel">'
+					+		'<h1>' + Utils.getLangString( _prefix + "_managed_devices" ) + '</h1>'
 					+		'<div class="scenes_section_delimiter"></div>'
-					+		'<div class="zibluegateway-toolbar">'
-					+			'<button type="button" class="zibluegateway-help"><span class="icon icon-help"></span>' + Utils.getLangString( "ziblue_help" ) + '</button>'
-					+			'<button type="button" class="zibluegateway-refresh"><span class="icon icon-refresh"></span>' + Utils.getLangString( "ziblue_refresh" ) + '</button>'
-					+			'<button type="button" class="zibluegateway-add"><span class="icon icon-add"></span>' + Utils.getLangString( "ziblue_add" ) + '</button>'
+					+		'<div class="' + _prefix + '-toolbar">'
+					+			'<button type="button" class="' + _prefix + '-help"><i class="fa fa-question fa-lg text-info" aria-hidden="true"></i>&nbsp;' + Utils.getLangString( _prefix + "_help" ) + '</button>'
+					+			'<button type="button" class="' + _prefix + '-refresh"><i class="fa fa-refresh fa-lg" aria-hidden="true"></i>&nbsp;' + Utils.getLangString( _prefix + "_refresh" ) + '</button>'
 					+		'</div>'
-					+		'<div class="zibluegateway-explanation zibluegateway-hidden">'
-					+			Utils.getLangString( "ziblue_explanation_known_devices" )
+					+		'<div class="' + _prefix + '-explanation ' + _prefix + '-hidden">'
+					+			Utils.getLangString( _prefix + "_explanation_known_devices" )
 					+		'</div>'
-					+		'<div id="zibluegateway-known-devices" class="zibluegateway-devices">'
-					+			Utils.getLangString( "ziblue_loading" )
+					+		'<div id="' + _prefix + '-known-devices" class="' + _prefix + '-devices">'
+					+			Utils.getLangString( _prefix + "_loading" )
 					+		'</div>'
-					+		'<div id="zibluegateway-device-actions" style="display: none;"></div>'
-					+		'<div id="zibluegateway-device-association" style="display: none;"></div>'
-					+		'<div id="zibluegateway-device-params" style="display: none;"></div>'
+					+		'<div id="' + _prefix + '-device-actions" style="display: none;"></div>'
+					+		'<div id="' + _prefix + '-device-association" style="display: none;"></div>'
+					+		'<div id="' + _prefix + '-device-params" style="display: none;"></div>'
 					+	'</div>'
 				);
 
 				// Manage UI events
-				$( "#zibluegateway-known-panel" )
-					.on( "click", ".zibluegateway-help", function() {
-						$( this ).parent().next( ".zibluegateway-explanation" ).toggleClass( "zibluegateway-hidden" );
+				$( "#" + _prefix + "-known-panel" )
+					.on( "click", "." + _prefix + "-help", function() {
+						$( this ).parent().next( "." + _prefix + "-explanation" ).toggleClass( _prefix + "-hidden" );
 					} )
-					.on( "click", ".zibluegateway-refresh", function() {
+					.on( "click", "." + _prefix + "-refresh", function() {
 						$.when( _performActionRefresh() )
 							.done( function() {
 								_drawDevicesList();
 							});
 					} )
-					.on( "click", ".zibluegateway-add", function() { _showAddDevice(); } )
+					.on( "click", "." + _prefix + "-add", function() { _showAddDevice(); } )
 					.click( function() {
-						$( "#zibluegateway-device-actions" ).css( "display", "none" );
+						$( "#" + _prefix + "-device-actions" ).css( "display", "none" );
 					} )
-					.on( "click", ".zibluegateway-actions", function( e ) {
+					.on( "click", "." + _prefix + "-actions", function( e ) {
 						var position = $( this ).position();
 						position.left = position.left + $( this ).outerWidth();
 						_selectedProductId = $( this ).data( "product-id" );
@@ -918,24 +857,24 @@ var ZiBlueGateway = ( function( api, $ ) {
 						}
 						e.stopPropagation();
 					} )
-					.on( "click", ".zibluegateway-show-association", function() {
+					.on( "click", "." + _prefix + "-show-association", function() {
 						_showDeviceAssociation( _selectedProductId, _indexFeatures[ _selectedProductId + ";" + _selectedFeatureName ] );
 					} )
-					.on( "click", ".zibluegateway-show-params", function() {
+					.on( "click", "." + _prefix + "-show-params", function() {
 						_showDeviceParams( _selectedProductId, _indexFeatures[ _selectedProductId + ";" + _selectedFeatureName ] );
 					} )
-					.on( "click", ".zibluegateway-cancel", function() {
+					.on( "click", "." + _prefix + "-cancel", function() {
 						_hideDeviceAssociation();
 						_hideDeviceParams();
 						_resumeDevicesRefresh();
 					} )
 					// Association event
-					.on( "click", ".zibluegateway-associate", _setDeviceAssociation )
+					.on( "click", "." + _prefix + "-associate", _setDeviceAssociation )
 					// Parameters event
-					.on( "click", ".zibluegateway-set", _setDeviceParams )
+					.on( "click", "." + _prefix + "-set", _setDeviceParams )
 					// Teach (receiver) event
-					.on( "click", ".zibluegateway-teach", function() {
-						api.ui.showMessagePopup( Utils.getLangString( "ziblue_confirmation_teach_in_receiver" ), 4, 0, {
+					.on( "click", "." + _prefix + "-teach", function() {
+						api.ui.showMessagePopup( Utils.getLangString( _prefix + "_confirmation_teach_in_receiver" ), 4, 0, {
 							onSuccess: function() {
 								_performActionTeachIn( _selectedProductId, "ON", "" );
 								return true;
@@ -943,8 +882,8 @@ var ZiBlueGateway = ( function( api, $ ) {
 						});
 					} )
 					// Clear (receiver) event
-					.on( "click", ".zibluegateway-clear", function() {
-						api.ui.showMessagePopup( Utils.getLangString( "ziblue_confirmation_clearing_receiver" ), 4, 0, {
+					.on( "click", "." + _prefix + "-clear", function() {
+						api.ui.showMessagePopup( Utils.getLangString( _prefix + "_confirmation_clearing_receiver" ), 4, 0, {
 							onSuccess: function() {
 								_performActionClear( _selectedProductId );
 								return true;
@@ -956,12 +895,12 @@ var ZiBlueGateway = ( function( api, $ ) {
 				_drawDevicesList();
 			});
 		} catch (err) {
-			Utils.logError('Error in ZiBlueGateway.showDevices(): ' + err);
+			Utils.logError( "Error in " + _pluginName + ".showDevices(): " + err );
 		}
 	}
 
 	// *************************************************************************************************
-	// Add ZiBlue device
+	// Add external device
 	// *************************************************************************************************
 
 	/**
@@ -1230,7 +1169,7 @@ var ZiBlueGateway = ( function( api, $ ) {
 			_deviceId = deviceId;
 		}
 		try {
-			$.when( _loadLocalization() ).then( function() {
+			$.when( _loadResourcesAsync(), _loadLocalizationAsync() ).then( function() {
 				var hasTeachingBeenDone = false;
 				api.setCpanelContent(
 						'<div id="zibluegateway-add-device-panel" class="zibluegateway-panel">'
@@ -1307,7 +1246,7 @@ var ZiBlueGateway = ( function( api, $ ) {
 	}
 
 	// *************************************************************************************************
-	// Discovered ZiBlue devices
+	// Discovered external devices
 	// *************************************************************************************************
 
 	function _stopDiscoveredDevicesRefresh() {
@@ -1325,13 +1264,13 @@ var ZiBlueGateway = ( function( api, $ ) {
 			_discoveredDevicesTimeout = window.setTimeout( _drawDiscoveredDevicesList, timeout );
 		}
 	}
-	
+
 	/**
 	 * Draw and manage discovered ziblue device list
 	 */
 	function _drawDiscoveredDevicesList() {
 		_stopDiscoveredDevicesRefresh();
-		if ( $( "#zibluegateway-discovered-devices" ).length === 0 ) {
+		if ( $( "#" + _prefix + "-discovered-devices" ).length === 0 ) {
 			return;
 		}
 		$.when( _getDevicesInfosAsync() )
@@ -1342,23 +1281,23 @@ var ZiBlueGateway = ( function( api, $ ) {
 						return d2.lastUpdate - d1.lastUpdate;
 					});
 					var html =	'<table><tr>'
-						+			'<th>' + Utils.getLangString( "ziblue_protocol" ) + '</th>'
-						+			'<th>' + Utils.getLangString( "ziblue_id" ) + '</th>'
-						+			'<th>' + Utils.getLangString( "ziblue_signal_quality" ) + '</th>'
-						+			'<th>' + Utils.getLangString( "ziblue_last_update" ) + '</th>'
-						+			'<th>' + Utils.getLangString( "ziblue_feature" ) + '</th>'
+						+			'<th>' + Utils.getLangString( _prefix + "_protocol" ) + '</th>'
+						+			'<th>' + Utils.getLangString( _prefix + "_id" ) + '</th>'
+						+			'<th>' + Utils.getLangString( _prefix + "_signal_quality" ) + '</th>'
+						+			'<th>' + Utils.getLangString( _prefix + "_last_update" ) + '</th>'
+						+			'<th>' + Utils.getLangString( _prefix + "_feature" ) + '</th>'
 						+			'<th></th>'
 						+		'</tr>';
 					$.each( devicesInfos.discoveredDevices, function( i, discoveredDevice ) {
 						var productId = discoveredDevice.protocol + ';' + discoveredDevice.protocolDeviceId;
-						html += '<tr class="zibluegateway-discovered-device" data-product-id="' + productId + '">'
-							+		'<td class="zibluegateway-protocol-name">' + discoveredDevice.protocol + '</td>'
-							+		'<td class="zibluegateway-protocol-id">' + discoveredDevice.protocolDeviceId + '</td>'
+						html += '<tr class="' + _prefix + '-discovered-device" data-product-id="' + productId + '">'
+							+		'<td>' + discoveredDevice.protocol + '</td>'
+							+		'<td>' + discoveredDevice.protocolDeviceId + '</td>'
 							+		'<td>' + ( discoveredDevice.rfQuality >= 0 ? discoveredDevice.rfQuality : '' ) + '</td>'
 							+		'<td>' + _convertTimestampToLocaleString( discoveredDevice.lastUpdate ) + '</td>'
 							+		'<td>'
-							+			'<div class="zibluegateway-device-name">' + discoveredDevice.name + '</div>'
-							+			'<table class="zibluegateway-feature-group">';
+							+			'<div class="font-weight-bold">' + discoveredDevice.name + '</div>'
+							+			'<table class="' + _prefix + '-feature-group">';
 						$.each( discoveredDevice.featureGroups, function( j, group ) {
 							if ( group.isUsed === false ) {
 								return;
@@ -1369,11 +1308,11 @@ var ZiBlueGateway = ( function( api, $ ) {
 								if ( feature.isUsed === false ) {
 									return;
 								}
-								html +=				'<div class="zibluegateway-feature-name">' + featureName + '</div>'
+								html +=				'<div class="ziblue-feature-name">' + featureName + '</div>'
 									+				( feature.comment ? '<div>' + feature.comment + '</div>' : '' )
-									+				( feature.state ? '<div class="zibluegateway-feature-state">' + feature.state + '</div>' : '' );
+									+				( feature.state ? '<div class="ziblue-feature-state">' + feature.state + '</div>' : '' );
 							});
-							html +=				'</td><td class="zibluegateway-device-type" width="40%">';
+							html +=				'</td><td class="ziblue-device-type" width="40%">';
 							if ( group.deviceTypes ) {
 								if ( group.deviceTypes.length > 1 ) {
 									html +=				'<select>';
@@ -1396,9 +1335,9 @@ var ZiBlueGateway = ( function( api, $ ) {
 							+	'</tr>';
 					});
 					html += '</table>';
-					$("#zibluegateway-discovered-devices").html( html );
+					$("#" + _prefix + "-discovered-devices").html( html );
 				} else {
-					$("#zibluegateway-discovered-devices").html( Utils.getLangString( "ziblue_no_discovered_device" ) );
+					$("#" + _prefix + "-discovered-devices").html( Utils.getLangString( "zigate_no_discovered_device" ) );
 				}
 				_discoveredDevicesLastRefresh = Date.now();
 				_resumeDiscoveredDevicesRefresh();
@@ -1413,33 +1352,33 @@ var ZiBlueGateway = ( function( api, $ ) {
 			_deviceId = deviceId;
 		}
 		try {
-			$.when( _loadLocalization() ).then( function() {
+			$.when( _loadResourcesAsync(), _loadLocalizationAsync() ).then( function() {
 				api.setCpanelContent(
-						'<div id="zibluegateway-discovered-panel" class="zibluegateway-panel">'
-					+		'<h1>' + Utils.getLangString( "ziblue_discovered_devices" ) + '</h1>'
+						'<div id="' + _prefix + '-discovered-panel" class="' + _prefix + '-panel">'
+					+		'<h1>' + Utils.getLangString( _prefix + "_discovered_devices" ) + '</h1>'
 					+		'<div class="scenes_section_delimiter"></div>'
-					+		'<div class="zibluegateway-toolbar">'
-					+			'<button type="button" class="zibluegateway-help"><span class="icon icon-help"></span>' + Utils.getLangString( "ziblue_help" ) + '</button>'
-					//+			'<button type="button" class="zibluegateway-ignore"><span class="icon icon-ignore"></span>Ignore</button>'
-					+			'<button type="button" class="zibluegateway-refresh" style="display: none"><span class="icon icon-refresh"></span>' + Utils.getLangString( "ziblue_refresh" ) + '</button>'
-					+			'<button type="button" class="zibluegateway-learn"><span class="icon icon-ok"></span>' + Utils.getLangString( "ziblue_learn" ) + '</button>'
+					+		'<div class="' + _prefix + '-toolbar">'
+					+			'<button type="button" class="' + _prefix + '-help"><i class="fa fa-question fa-lg text-info" aria-hidden="true"></i>&nbsp;' + Utils.getLangString( _prefix + "_help" ) + '</button>'
+					//+			'<button type="button" class="' + _prefix + '-ignore"><span class="icon icon-ignore"></span>' + Utils.getLangString( _prefix + "_ignore" ) + '</button>'
+					+			'<button type="button" class="' + _prefix + '-refresh" style="display: none"><span class="icon icon-refresh"></span>' + Utils.getLangString( _prefix + "_refresh" ) + '</button>'
+					+			'<button type="button" class="' + _prefix + '-learn"><i class="fa fa-plus fa-lg" aria-hidden="true"></i>&nbsp;' + Utils.getLangString( _prefix + "_learn" ) + '</button>'
 					+		'</div>'
-					+		'<div class="zibluegateway-explanation zibluegateway-hidden">'
-					+			Utils.getLangString( "ziblue_explanation_discovered_devices" )
+					+		'<div class="' + _prefix + '-explanation ' + _prefix + '-hidden">'
+					+			Utils.getLangString( _prefix + "_explanation_discovered_devices" )
 					+		'</div>'
-					+		'<div id="zibluegateway-discovered-devices" class="zibluegateway-devices">'
-					+			Utils.getLangString( "ziblue_loading" )
+					+		'<div id="' + _prefix + '-discovered-devices" class="' + _prefix + '-devices">'
+					+			Utils.getLangString( _prefix + "_loading" )
 					+		'</div>'
 					+	'</div>'
 				);
 
 				function _getSelectedProductIds() {
 					var items = [];
-					$("#zibluegateway-discovered-devices input:checked:visible").each( function() {
-						var $device = $( this ).parents( ".zibluegateway-discovered-device" );
+					$( "#" + _prefix + "-discovered-devices input:checked:visible" ).each( function() {
+						var $device = $( this ).parents( "." + _prefix + "-discovered-device" );
 						var productId = $device.data( "product-id" );
 						var deviceTypes = [];
-						$device.find( ".zibluegateway-device-type" )
+						$device.find( "." + _prefix + "-device-type" )
 							.each( function( index ) {
 								var $select = $( this ).find( "select" );
 								if ( $select.length > 0 ) {
@@ -1454,20 +1393,20 @@ var ZiBlueGateway = ( function( api, $ ) {
 				}
 
 				// Manage UI events
-				$( "#zibluegateway-discovered-panel" )
-					.on( "click", ".zibluegateway-help", function() {
-						$( ".zibluegateway-explanation" ).toggleClass( "zibluegateway-hidden" );
+				$( "#" + _prefix + "-discovered-panel" )
+					.on( "click", "." + _prefix + "-help", function() {
+						$( "." + _prefix + "-explanation" ).toggleClass( _prefix + "-hidden" );
 					} )
-					.on( "click", ".zibluegateway-learn", function( e ) {
+					.on( "click", "." + _prefix + "-learn", function( e ) {
 						var productIds = _getSelectedProductIds();
 						if ( productIds.length === 0 ) {
-							api.ui.showMessagePopup( Utils.getLangString( "ziblue_select_device" ), 1 );
+							api.ui.showMessagePopup( Utils.getLangString( _prefix + "_select_device" ), 1 );
 						} else {
-							api.ui.showMessagePopup( Utils.getLangString( "ziblue_confirmation_learning_devices" ) + " " + productIds.join( "<br/>" ), 4, 0, {
+							api.ui.showMessagePopup( Utils.getLangString( _prefix + "_confirmation_learning_devices" ) + " " + productIds.join( "<br/>" ), 4, 0, {
 								onSuccess: function() {
 									$.when( _performActionCreateDevices( productIds ) )
 										.done( function() {
-											_showReload( Utils.getLangString( "ziblue_devices_have_been_created" ), function() {
+											_showReload( Utils.getLangString( _prefix + "_devices_have_been_created" ), function() {
 												_showDevices();
 											});
 										});
@@ -1476,24 +1415,24 @@ var ZiBlueGateway = ( function( api, $ ) {
 							});
 						}
 					} )
-					.on( "click", ".zibluegateway-ignore", function( e ) {
+					.on( "click", "." + _prefix + "-ignore", function( e ) {
 						alert( "TODO" );
 					})
 					.on( "focus", "select", function( e ) {
 						_stopDiscoveredDevicesRefresh();
 					})
 					.on( "blur", "select", function( e ) {
-						if ( $( "#zibluegateway-discovered-panel input:checked" ).length === 0 ) {
+						if ( $( "#" + _prefix + "-discovered-panel input:checked" ).length === 0 ) {
 							_resumeDiscoveredDevicesRefresh();
 						}
 					})
 					.on( "change", "select", function( e ) {
-						if ( $( "#zibluegateway-discovered-panel input:checked" ).length === 0 ) {
+						if ( $( "#" + _prefix + "-discovered-panel input:checked" ).length === 0 ) {
 							_resumeDiscoveredDevicesRefresh();
 						}
 					})
 					.on( "change", "input:checkbox", function( e ) {
-						if ( $( "#zibluegateway-discovered-panel input:checked" ).length > 0 ) {
+						if ( $( "#" + _prefix + "-discovered-panel input:checked" ).length > 0 ) {
 							_stopDiscoveredDevicesRefresh();
 						} else {
 							_resumeDiscoveredDevicesRefresh();
@@ -1505,7 +1444,7 @@ var ZiBlueGateway = ( function( api, $ ) {
 				_drawDiscoveredDevicesList();
 			});
 		} catch (err) {
-			Utils.logError('Error in ZiBlueGateway.showDevices(): ' + err);
+			Utils.logError( "Error in " + _pluginName + ".showDevices(): " + err );
 		}
 	}
 
@@ -1517,9 +1456,9 @@ var ZiBlueGateway = ( function( api, $ ) {
 	 * 
 	 */
 	function _performActionRefresh() {
-		Utils.logDebug( "[ZiBlueGateway.performActionRefresh] Refresh the list of ZiBlue devices" );
+		Utils.logDebug( "[" + _pluginName + ".performActionRefresh] Refresh the list of external devices" );
 		return Utils.performActionOnDevice(
-			_deviceId, ZIBLUEGATEWAY_SID, "Refresh", {
+			_deviceId, PLUGIN_SID, "Refresh", {
 				output_format: "json"
 			}
 		);
@@ -1529,9 +1468,9 @@ var ZiBlueGateway = ( function( api, $ ) {
 	 * 
 	 */
 	function _performActionCreateDevices( encodedProductIds ) {
-		Utils.logDebug( "[ZiBlueGateway.performActionCreateDevices] Create ZiBlue product/features '" + encodedProductIds + "'" );
+		Utils.logDebug( "[" + _pluginName + ".performActionCreateDevices] Create external product/features '" + encodedProductIds + "'" );
 		return Utils.performActionOnDevice(
-			_deviceId, ZIBLUEGATEWAY_SID, "CreateDevices", {
+			_deviceId, PLUGIN_SID, "CreateDevices", {
 				output_format: "json",
 				productIds: encodeURIComponent( encodedProductIds.join( "|" ) )
 			}
@@ -1542,9 +1481,9 @@ var ZiBlueGateway = ( function( api, $ ) {
 	 * 
 	 */
 	function _performActionTeachIn( productId, action, comment ) {
-		Utils.logDebug( "[ZiBlueGateway.performActionTeachIn] Teach in ZiBlue product '" + productId + "', action: " + action + ", comment: " + comment );
+		Utils.logDebug( "[" + _pluginName + ".performActionTeachIn] Teach in ZiBlue product '" + productId + "', action: " + action + ", comment: " + comment );
 		return Utils.performActionOnDevice(
-			_deviceId, ZIBLUEGATEWAY_SID, "TeachIn", {
+			_deviceId, PLUGIN_SID, "TeachIn", {
 				output_format: "json",
 				productId: productId,
 				action: action,
@@ -1554,12 +1493,12 @@ var ZiBlueGateway = ( function( api, $ ) {
 	}
 
 	/**
-	 * Associate ZiBlue device to Vera devices
+	 * Associate external device to Vera devices
 	 */
 	function _performActionAssociate( productId, featureName, encodedAssociation ) {
-		Utils.logDebug( "[ZiBlueGateway.performActionAssociate] Associate ZiBlue product/feature '" + productId + "/" + featureName + "' with " + encodedAssociation );
+		Utils.logDebug( "[" + _pluginName + ".performActionAssociate] Associate external product/feature '" + productId + "/" + featureName + "' with " + encodedAssociation );
 		return Utils.performActionOnDevice(
-			_deviceId, ZIBLUEGATEWAY_SID, "Associate", {
+			_deviceId, PLUGIN_SID, "Associate", {
 				output_format: "json",
 				productId: productId,
 				feature: featureName,
@@ -1572,9 +1511,9 @@ var ZiBlueGateway = ( function( api, $ ) {
 	 * Test ON/OFF on newly created device (before validating)
 	 */
 	function _performActionSetTarget( productId, targetValue ) {
-		Utils.logDebug( "[ZiBlueGateway._performActionSetTarget] Set target for ZiBlue product '" + productId + " to " + targetValue );
+		Utils.logDebug( "[" + _pluginName + "._performActionSetTarget] Set target for ZiBlue product '" + productId + " to " + targetValue );
 		return Utils.performActionOnDevice(
-			_deviceId, ZIBLUEGATEWAY_SID, "SetTarget", {
+			_deviceId, PLUGIN_SID, "SetTarget", {
 				output_format: "json",
 				productId: productId,
 				newTargetValue: targetValue
@@ -1593,7 +1532,7 @@ var ZiBlueGateway = ( function( api, $ ) {
 		var d = $.Deferred();
 		api.showLoadingOverlay();
 		$.ajax( {
-			url: Utils.getDataRequestURL() + "id=lr_ZiBlueGateway&command=getErrors&output_format=json#",
+			url: Utils.getDataRequestURL() + "id=lr_" + _pluginName + "&command=getErrors&output_format=json#",
 			dataType: "json"
 		} )
 		.done( function( errors ) {
@@ -1617,7 +1556,7 @@ var ZiBlueGateway = ( function( api, $ ) {
 	 * Draw errors list
 	 */
 	function _drawErrorsList() {
-		if ( $( "#zibluegateway-errors" ).length === 0 ) {
+		if ( $( "#" + _prefix + "-errors" ).length === 0 ) {
 			return;
 		}
 		$.when( _getErrorsAsync() )
@@ -1632,9 +1571,9 @@ var ZiBlueGateway = ( function( api, $ ) {
 							+	'</tr>';
 					} );
 					html += '</table>';
-					$( "#zibluegateway-errors" ).html( html );
+					$( "#" + _prefix + "-errors" ).html( html );
 				} else {
-					$( "#zibluegateway-errors" ).html( Utils.getLangString( "ziblue_no_error" ) );
+					$( "#" + _prefix + "-errors" ).html( Utils.getLangString( _prefix + "_no_error" ) );
 				}
 			} );
 	}
@@ -1645,32 +1584,32 @@ var ZiBlueGateway = ( function( api, $ ) {
 	function _showErrors( deviceId ) {
 		_deviceId = deviceId;
 		try {
-			$.when( _loadLocalization() ).then( function() {
+			$.when( _loadResourcesAsync(), _loadLocalizationAsync() ).then( function() {
 				api.setCpanelContent(
-						'<div id="zibluegateway-errors-panel" class="zibluegateway-panel">'
-					+		'<h1>' + Utils.getLangString( "ziblue_errors" ) + '</h1>'
+						'<div id="' + _prefix + '-errors-panel" class="' + _prefix + '-panel">'
+					+		'<h1>' + Utils.getLangString( _prefix + "_errors" ) + '</h1>'
 					+		'<div class="scenes_section_delimiter"></div>'
-					/*+		'<div class="zibluegateway-toolbar">'
-					+			'<button type="button" class="zibluegateway-help"><span class="icon icon-help"></span>Help</button>'
+					/*+		'<div class="' + _prefix + '-toolbar">'
+					+			'<button type="button" class="' + _prefix + '-help"><i class="fa fa-question fa-lg text-info" aria-hidden="true"></i>&nbsp;' + Utils.getLangString( _prefix + "_help" ) + '</button>'
 					+		'</div>'
-					+		'<div class="zibluegateway-explanation zibluegateway-hidden">'
-					+			Utils.getLangString( "ziblue_explanation_errors" )
+					+		'<div class="' + _prefix + '-explanation ' + _prefix + '-hidden">'
+					+			Utils.getLangString( _prefix + "_explanation_errors" )
 					+		'</div>'*/
-					+		'<div id="zibluegateway-errors">'
-					+			Utils.getLangString( "ziblue_loading" )
+					+		'<div id="' + _prefix + '-errors">'
+					+			Utils.getLangString( _prefix + "_loading" )
 					+		'</div>'
 					+	'</div>'
 				);
 				// Manage UI events
-				/*$( "#zibluegateway-errors-panel" )
-					.on( "click", ".zibluegateway-help" , function() {
-						$( ".zibluegateway-explanation" ).toggleClass( "zibluegateway-hidden" );
+				/*$( "#" + _prefix + "-errors-panel" )
+					.on( "click", "." + _prefix + "-help" , function() {
+						$( "." + _prefix + "-explanation" ).toggleClass( _prefix + "-hidden" );
 					} );*/
 				// Display the errors
 				_drawErrorsList();
 			});
 		} catch ( err ) {
-			Utils.logError( "Error in ZiBlueGateway.showErrors(): " + err );
+			Utils.logError( "Error in " + _pluginName + ".showErrors(): " + err );
 		}
 	}
 
@@ -1686,11 +1625,11 @@ var ZiBlueGateway = ( function( api, $ ) {
 <input type="image" src="https://www.paypalobjects.com/en_US/FR/i/btn/btn_donateCC_LG.gif" border="0" name="submit" alt="PayPal - The safer, easier way to pay online!">\
 <img alt="" border="0" src="https://www.paypalobjects.com/fr_FR/i/scr/pixel.gif" width="1" height="1">\
 </form>';
-		$.when( _loadLocalization() ).then( function() {
+		$.when( _loadResourcesAsync(), _loadLocalizationAsync() ).then( function() {
 			api.setCpanelContent(
-					'<div id="zibluegateway-donate-panel" class="zibluegateway-panel">'
-				+		'<div id="zibluegateway-donate">'
-				+			'<span>' + Utils.getLangString( "ziblue_donate" ) + '</span>'
+					'<div id="' + _prefix + '-donate-panel" class="' + _prefix + '-panel">'
+				+		'<div id="' + _prefix + '-donate">'
+				+			'<span>' + Utils.getLangString( _prefix + "_donate" ) + '</span>'
 				+			donateHtml
 				+		'</div>'
 				+	'</div>'
@@ -1711,17 +1650,12 @@ var ZiBlueGateway = ( function( api, $ ) {
 		showDonate: _showDonate,
 
 		ALTUI_drawDevice: function( device ) {
-			//var status = parseInt( MultiBox.getStatus( device, "urn:upnp-org:serviceId:SwitchPower1", "Status" ), 10 );
-			var version = MultiBox.getStatus( device, "urn:upnp-org:serviceId:ZiBlueGateway1", "PluginVersion" );
+			var version = MultiBox.getStatus( device, PLUGIN_SID, "PluginVersion" );
 			return '<div class="panel-content">'
-				//+		ALTUI_PluginDisplays.createOnOffButton( status, "altui-zibluegateway-" + device.altuiid, _T( "OFF,ON" ), "pull-right" )
 				+		'<div class="btn-group" role="group" aria-label="...">'
 				+			'v' + version
 				+		'</div>'
 				+	'</div>';
-				//+	'<script type="text/javascript">'
-				//+		'$("div#altui-zibluegateway-{0}").on("click touchend", function() { ALTUI_PluginDisplays.toggleOnOffButton("{0}", "div#altui-zibluegateway-{0}"); } );'.format( device.altuiid )
-				//+	'</script>';
 		}
 	};
 

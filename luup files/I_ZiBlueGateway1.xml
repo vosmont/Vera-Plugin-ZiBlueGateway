@@ -10,7 +10,6 @@
 
 		function ziblue_gateway_startup (lul_device)
 			luup.log("ZiBlue Gateway startup")
-			--package.loaded.L_ZiBlueGateway1 = nil
 			plugin = require("L_ZiBlueGateway1")
 			return plugin.init(lul_device)
 		end
@@ -73,6 +72,43 @@
 			<name>Stop</name>
 			<job>
 				return plugin.Child.moveShutter( lul_device, "stop" )
+			</job>
+		</action>
+		<!-- HVAC -->
+		<action>
+			<serviceId>urn:upnp-org:serviceId:HVAC_UserOperatingMode1</serviceId>
+			<name>SetModeTarget</name>
+			<job>
+				return plugin.Child.setModeStatus( lul_device, lul_settings.NewMode or lul_settings.NewModeTarget )
+			</job>
+		</action>
+		<action>
+			<serviceId>urn:upnp-org:serviceId:TemperatureSetpoint1</serviceId>
+			<name>SetCurrentSetpoint</name>
+			<job>
+				return plugin.Child.setSetPoint( lul_device, lul_settings.NewCurrentSetpoint )
+			</job>
+		</action>
+		<action>
+			<serviceId>urn:upnp-org:serviceId:TemperatureSetpoint1_Heat</serviceId>
+			<name>SetCurrentSetpoint</name>
+			<job>
+				return plugin.Child.setSetPoint( lul_device, lul_settings.NewCurrentSetpoint, "Heat" )
+			</job>
+		</action>
+		<action>
+			<serviceId>urn:upnp-org:serviceId:TemperatureSetpoint1_Cool</serviceId>
+			<name>SetCurrentSetpoint</name>
+			<job>
+				return plugin.Child.setSetPoint( lul_device, lul_settings.NewCurrentSetpoint, "Cool" )
+			</job>
+		</action>
+		<!-- PilotWire -->
+		<action>
+			<serviceId>urn:antor-fr:serviceId:PilotWire1</serviceId>
+			<name>SetTarget</name>
+			<job>
+				return plugin.Child.setModeStatus( lul_device, lul_settings.newTargetValue, "PilotWire" )
 			</job>
 		</action>
 		<!-- ZiBlue gateway -->

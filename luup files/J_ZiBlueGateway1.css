@@ -1,0 +1,57 @@
+.ziblue-panel { position: relative; padding: 5px; }
+.ziblue-panel table { width: 100%; }
+.ziblue-panel th { text-align: center; background-color: #ccc; }
+.ziblue-panel td { padding: 5px; border: 1px solid #ccc; vertical-align: top; }
+.ziblue-panel label { font-weight: normal }
+.ziblue-panel button { display: inline-block; }
+.ziblue-panel button.highlighted { background: #006d46; color: #fff; }
+
+.ziblue-hidden { display: none; }
+.ziblue-error { color:red; }
+.ziblue-explanation { margin: 5px; padding: 5px; border: 1px solid; background: #FFFF88}
+.ziblue-toolbar { height: 25px; text-align: right; margin: 5px; }
+
+.ziblue-association-room { font-weight: bold; width: 100%; background: #ccc; }
+div.ziblue-association { padding-left: 20px; }
+div.ziblue-association label span { padding: 4px 0 0 2px; }
+span.ziblue-association { margin-right: 5px; }
+span.ziblue-association span { padding: 1px; }
+.ziblue-association-device .ziblue-short-press { color: white; background: orange; border: 1px solid orange; }
+.ziblue-association-device .ziblue-long-press  { color: white; background: red; border: 1px solid red; }
+.ziblue-association-scene .ziblue-short-press  { color: white; background: blue; border: 1px solid blue; }
+.ziblue-association-scene .ziblue-long-press   { color: white; background: green; border: 1px solid green; }
+.ziblue-association-zibluedevice .ziblue-short-press  { color: white; background: purple; border: 1px solid purple; }
+
+.ziblue-short-press {}
+table.ziblue-feature-group td { padding: 0px; }
+.ziblue-long-press { border: red; }
+
+.ziblue-protocol-name { font-weight: bold; }
+.ziblue-protocol-id { font-weight: bold; }
+.ziblue-device-name { font-weight: bold; }
+.ziblue-feature-name { font-weight: bold; font-style: italic; }
+.ziblue-feature-state { font-style: italic; }
+
+#ziblue-device-actions { position: absolute; background: #FFF; border: 2px solid #AAA; white-space: nowrap; }
+#ziblue-device-actions td { padding: 5px; }
+#ziblue-device-actions button { margin: 2px; }
+#ziblue-device-association {
+	position: absolute; top: 0px; left: 0px;
+	width: 100%;
+	background: #FFF; border: 2px solid #AAA;
+}
+#ziblue-device-params {
+	position: absolute; top: 0px; left: 0px;
+	width: 100%;
+	background: #FFF; border: 2px solid #AAA;
+}
+
+#ziblue-donate { text-align: center; width: 70%; margin: auto; }
+#ziblue-donate form { height: 50px; }
+
+.ziblue-feature-group td { border: 0 }
+.ziblue-setting { margin-top: 10px; border-radius: 25px; padding: 1px 25px; text-align: left; }
+.ziblue-setting span { display: inline-block; width: 30%; }
+h3 div.ui-widget-content {
+	color: #fff !important; background-color: #00a652 !important;
+}

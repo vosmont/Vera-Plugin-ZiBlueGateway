@@ -1,7 +1,7 @@
 --[[
   This file is part of the plugin ZiBlue Gateway.
   https://github.com/vosmont/Vera-Plugin-ZiBlueGateway
-  Copyright (c) 2017 Vincent OSMONT
+  Copyright (c) 2018 Vincent OSMONT
   This code is released under the MIT License, see LICENSE.
 --]]
 
@@ -11,13 +11,15 @@ module( "L_ZiBlueGateway1", package.seeall )
 local status, json = pcall( require, "dkjson" )
 
 
+--https://apps.mios.com/plugin.php?id=1648
+
 -- **************************************************
 -- Plugin constants
 -- **************************************************
 
 _NAME = "ZiBlueGateway"
 _DESCRIPTION = "ZiBlue gateway for the Vera"
-_VERSION = "0.8"
+_VERSION = "1.0"
 _AUTHOR = "vosmont"
 
 
@@ -100,6 +102,15 @@ local VARIABLE = {
 	WATTS = { "urn:micasaverde-com:serviceId:EnergyMetering1", "Watts", true },
 	KWH = { "urn:micasaverde-com:serviceId:EnergyMetering1", "KWH", true, "KWH_DATE" },
 	KWH_DATE = { "urn:micasaverde-com:serviceId:EnergyMetering1", "KWHReading", true },
+	-- HVAC
+	HVAC_MODE_STATE = { "urn:micasaverde-com:serviceId:HVAC_OperatingState1", "ModeState", true },
+	HVAC_MODE_STATUS = { "urn:upnp-org:serviceId:HVAC_UserOperatingMode1", "ModeStatus", true },
+	HVAC_CURRENT_SETPOINT = { "urn:upnp-org:serviceId:TemperatureSetpoint1", "CurrentSetpoint", true },
+	HVAC_CURRENT_SETPOINT_HEAT = { "urn:upnp-org:serviceId:TemperatureSetpoint1_Heat", "CurrentSetpoint", true },
+	HVAC_CURRENT_SETPOINT_COOL = { "urn:upnp-org:serviceId:TemperatureSetpoint1_Cool", "CurrentSetpoint", true },
+	-- Pilot Wire (Antor)
+	PILOTWIRE_STATUS = { "urn:antor-fr:serviceId:PilotWire1", "Status", true },
+	PILOTWIRE_TARGET = { "urn:antor-fr:serviceId:PilotWire1", "Target", true },
 	-- IO connection
 	IO_DEVICE = { "urn:micasaverde-com:serviceId:HaDevice1", "IODevice", true },
 	IO_PORT_PATH = { "urn:micasaverde-com:serviceId:HaDevice1", "IOPortPath", true },
@@ -308,7 +319,7 @@ local DEVICE = {
 			end
 		}
 	},
-	PORTAL  = { -- TODO
+	PORTAL = { -- TODO
 		name = "ui7_device_type_window_covering",
 		type = "urn:schemas-micasaverde-com:device:WindowCovering:1", file = "D_WindowCovering1.xml",
 		parameters = { { "DIMMER_LEVEL", "0" } },
@@ -319,6 +330,27 @@ local DEVICE = {
 			[ "button2" ] = function( ziBlueDevice, feature )
 				DeviceHelper.setStatus( ziBlueDevice, feature, "0", nil, true )
 			end
+		}
+	},
+	PILOT_WIRE = {
+		name = "ui7_device_type_pilot_wire",
+		type = "urn:antor-fr:device:PilotWire:1", file = "D_PilotWire1.xml",
+		parameters = { { "PILOTWIRE_STATUS", "0" } },
+		commands = {
+		}
+	},
+	THERMOSTAT = {
+		name = "ui7_device_type_thermostat",
+		type = "urn:schemas-upnp-org:device:HVAC_ZoneThermostat:1", file = "D_HVAC_ZoneThermostat1.xml",
+		parameters = { { "SWITCH_POWER", "0" }, { "HVAC_MODE_STATE", "Idle" }, { "HVAC_MODE_STATUS", "Off" }, { "HVAC_CURRENT_SETPOINT", "15" }, { "HVAC_CURRENT_SETPOINT_HEAT", "15" }, { "HVAC_CURRENT_SETPOINT_COOL", "15" } },
+		commands = {
+		}
+	},
+	HEATER = {
+		name = "ui7_device_type_heater",
+		type = "urn:schemas-upnp-org:device:Heater:1", file = "D_Heater1.xml",
+		parameters = { { "SWITCH_POWER", "0" }, { "HVAC_MODE_STATE", "Idle" }, { "HVAC_MODE_STATUS", "Off" }, { "HVAC_CURRENT_SETPOINT", "15" }, { "HVAC_CURRENT_SETPOINT_HEAT", "15" } },
+		commands = {
 		}
 	}
 }
@@ -460,10 +492,10 @@ local ZIBLUE_INFOS = {
 			{ features = { "total rain", "current rain" }, deviceTypes = { "RAIN_METER" } } -- TODO
 		}
 	},
-	[ "10" ] = { -- X2D Thermostats (TODO)
-		name = "Thermostat (TODO)",
+	[ "10" ] = { -- X2D Thermostats
+		name = "Thermostat",
 		featureGroups = {
-			{ features = {}, deviceTypes = {}, name = "" }
+			{ features = { "state" }, deviceTypes = { "HEATER", "THERMOSTAT", "PILOT_WIRE" }, settings = { } }
 		}
 	},
 	[ "11;0" ] = { -- X2D detector/sensor device
@@ -521,9 +553,18 @@ local ZIBLUE_SEND_PROTOCOL = {
 	},
 	X2D433 = { name = "X2D 433Mhz" },
 	X2D868 = { name = "X2D 868Mhz" },
-	X2DSHUTTER = { name = "X2D Shutter 868Mhz" },
-	X2DELEC = { name = "X2D Elec 868Mhz" },
-	X2DGAS = { name = "X2D Gaz 868Mhz" },
+	X2DSHUTTER = {
+		name = "X2D Shutter 868Mhz",
+		deviceTypes = { "SHUTTER" }
+	},
+	X2DELEC = {
+		name = "X2D Elec 868Mhz",
+		deviceTypes = { "PILOT_WIRE", "HEATER" }
+	},
+	X2DGAS = {
+		name = "X2D Gaz 868Mhz",
+		deviceTypes = { "THERMOSTAT" }
+	},
 	RTS = {
 		name = "Somfy RTS 433Mhz",
 		deviceTypes = { "BINARY_LIGHT", "SHUTTER;qualifier=0", "PORTAL;qualifier=1" }, -- TODO : portal
@@ -824,6 +865,15 @@ do -- extend string
 		end
 		return result
 	end
+
+	function string_decodeURI(s)
+		local hex={}
+		for i=0,255 do
+			hex[string.format("%0x",i)]=string.char(i)
+			hex[string.format("%0X",i)]=string.char(i)
+		end
+		return ( s:gsub( '%%(%x%x)', hex ) )
+	end
 end
 
 
@@ -1092,9 +1142,9 @@ DeviceHelper = {
 			local qualifier = feature.settings.qualifier and ( " QUALIFIER " .. ( ( feature.settings.qualifier == "1" ) and "1" or "0" ) ) or ""
 			local burst = feature.settings.burst and ( " BURST " .. feature.settings.burst ) or ""
 			if ( loadLevel and DeviceHelper.isDimmable( ziBlueDevice, feature, true ) ) then 
-				Network.send( "ZIA++DIM ID " .. ziBlueDevice.protocolDeviceId .. " " .. ziBlueDevice.protocol .. " %" .. tostring(loadLevel) .. qualifier .. burst )
+				Network.send( "ZIA++DIM " .. ziBlueDevice.protocol .. " ID " .. ziBlueDevice.protocolDeviceId .. " %" .. tostring(loadLevel) .. qualifier .. burst )
 			else
-				Network.send( "ZIA++" .. cmd .. " ID " .. ziBlueDevice.protocolDeviceId .. " " .. ziBlueDevice.protocol .. qualifier .. burst )
+				Network.send( "ZIA++" .. cmd .. " " .. ziBlueDevice.protocol .. " ID " .. ziBlueDevice.protocolDeviceId .. qualifier .. burst )
 			end
 		end
 
@@ -1188,15 +1238,15 @@ DeviceHelper = {
 			if ( loadLevel > 0 ) then
 				if not DeviceHelper.isDimmable( ziBlueDevice, feature, true ) then
 					if ( loadLevel == 100 ) then
-						Network.send( "ZIA++ON ID " .. ziBlueDevice.protocolDeviceId .. " " .. ziBlueDevice.protocol .. qualifier .. burst )
+						Network.send( "ZIA++ON " .. ziBlueDevice.protocol .. " ID " .. ziBlueDevice.protocolDeviceId .. qualifier .. burst )
 					else
 						debug( "This protocol does not support DIM", "DeviceHelper.setLoadLevel" )
 					end
 				else
-					Network.send( "ZIA++DIM ID " .. ziBlueDevice.protocolDeviceId .. " " .. ziBlueDevice.protocol .. " %" .. tostring(loadLevel) .. qualifier .. burst )
+					Network.send( "ZIA++DIM " .. ziBlueDevice.protocol .. " ID " .. ziBlueDevice.protocolDeviceId .. " %" .. tostring(loadLevel) .. qualifier .. burst )
 				end
 			else
-				Network.send( "ZIA++OFF ID " .. ziBlueDevice.protocolDeviceId .. " " .. ziBlueDevice.protocol .. qualifier .. burst )
+				Network.send( "ZIA++OFF " .. ziBlueDevice.protocol .. " ID " .. ziBlueDevice.protocolDeviceId .. qualifier .. burst )
 			end
 		end
 
@@ -1333,7 +1383,7 @@ DeviceHelper = {
 				if ( feature.settings.receiver and not ( noAction == true ) ) then
 					debug( "RTS 'My' function", "DeviceHelper.moveShutter" )
 					local burst = feature.settings.burst and ( " BURST " .. feature.settings.burst ) or ""
-					Network.send( "ZIA++DIM ID " .. ziBlueDevice.protocolDeviceId .. " RTS %4 QUALIFIER 0" .. burst )
+					Network.send( "ZIA++DIM RTS ID " .. ziBlueDevice.protocolDeviceId .. " %4 QUALIFIER 0" .. burst )
 				end
 			else
 				debug( "Stop is not managed for the protocol " .. ziBlueDevice.protocol, "DeviceHelper.moveShutter" )
@@ -1341,7 +1391,53 @@ DeviceHelper = {
 		else
 			error( "Shutter #" .. tostring(feature.deviceId) .. " direction: " .. tostring(direction) .. " is not allowed", "DeviceHelper.moveShutter" )
 		end
+	end,
 
+	-- Set HVAC Mode Status
+	setModeStatus = function( ziBlueDevice, feature, newModeStatus, option )
+	debug( "test", "DeviceHelper.setModeStatus" )
+		local deviceId = feature.deviceId
+		local cmd = "ON"
+		local param = "7"
+		if ( option == "PilotWire" ) then
+			if ( newModeStatus == "0" ) then
+				-- Shutdown
+				cmd = "OFF"
+				param = "4"
+			elseif ( newModeStatus == "1" ) then
+				-- Frost free
+				param = "5"
+			elseif ( newModeStatus == "2" ) then
+				-- Economy
+				param = "0"
+			elseif ( newModeStatus == "3" ) then
+				-- Comfort
+				param = "3"
+			end
+			Variable.set( deviceId, VARIABLE.PILOTWIRE_STATUS, newModeStatus )
+		else
+			if ( newModeStatus == "Off" ) then
+				cmd = "OFF"
+				param = "4"
+			elseif ( newModeStatus == "HeatOn" ) then
+				param = "7"
+			end
+			Variable.set( deviceId, VARIABLE.HVAC_MODE_STATUS, newModeStatus )
+		end
+		
+		debug( "Device #" .. tostring( deviceId ) .. " set mode status " .. tostring(newModeStatus), "DeviceHelper.setModeStatus" )
+		
+		
+		-- Send command if needed
+		if feature.settings.receiver then
+			Network.send( "ZIA++" .. cmd  .. " " .. ziBlueDevice.protocol .. " ID " .. ziBlueDevice.protocolDeviceId .. " %" .. param )
+		end
+		
+	end,
+
+	-- Set HVAC SetPoint
+	setSetPoint = function( ziBlueDevice, feature, newSetpoint, option )
+	
 	end
 }
 
@@ -1483,7 +1579,7 @@ function handleIncoming( lul_data )
 			if ( string.sub( jsonData, 1, 1 ) == "{" ) then
 				local decodeSuccess, data, _, jsonError = pcall( json.decode, jsonData )
 				if ( decodeSuccess and data ) then
-					debug( source .. " " .. qualifier .. ": " .. json.encode( data ), "handleIncoming")
+					debug( source .. " " .. qualifier .. ": " .. json.encode( data ), "handleIncoming" )
 					if data.systemStatus then
 						Tools.updateSystemStatus( data.systemStatus.info )
 					elseif data.parrotStatus then
@@ -1492,16 +1588,16 @@ function handleIncoming( lul_data )
 						Message.process( source, qualifier, data, lul_data )
 					end
 				else
-					error( "JSON error: " .. tostring( jsonError ) )
+					error( "JSON error: " .. tostring( jsonError ), "handleIncoming" )
 				end
 			else
 				if ( string.sub( jsonData, 1, 7 ) ~= "Welcome" ) then
-					error( "Unkown message: " .. tostring( lul_data ) )
+					error( "Unkown message: " .. tostring( lul_data ), "handleIncoming" )
 				end 
 			end
 
 		else
-			debug( "Unkown data: " .. tostring( lul_data ), "handleIncoming")
+			debug( "Unkown data: " .. tostring( lul_data ), "handleIncoming" )
 		end
 	end
 end
@@ -2203,6 +2299,27 @@ Child = {
 		end
 		DeviceHelper.moveShutter( ziBlueDevice, feature, direction )
 		return JOB_STATUS.DONE
+	end,
+
+	setModeStatus = function( childDeviceId, newModeStatus, option )
+		debug( "test", "Child.setModeStatus" )
+		local ziBlueDevice, feature = ZiBlueDevices.getFromDeviceId( childDeviceId )
+		if (ziBlueDevice == nil) then
+			error( "Device #" .. tostring( childDeviceId ) .. " is not an ZiBlue device", "Child.setModeStatus" )
+			return JOB_STATUS.ERROR
+		end
+		DeviceHelper.setModeStatus( ziBlueDevice, feature, newModeStatus, option )
+		return JOB_STATUS.DONE
+	end,
+
+	setSetPoint = function( childDeviceId, newSetpoint, option )
+		local ziBlueDevice, feature = ZiBlueDevices.getFromDeviceId( childDeviceId )
+		if (ziBlueDevice == nil) then
+			error( "Device #" .. tostring( childDeviceId ) .. " is not an ZiBlue device", "Child.setCurrentSetPoint" )
+			return JOB_STATUS.ERROR
+		end
+		DeviceHelper.setSetPoint( ziBlueDevice, feature, newSetpoint, option )
+		return JOB_STATUS.DONE
 	end
 
 }
@@ -2261,11 +2378,11 @@ function createDevices( productIds )
 	debug( "Create devices " .. tostring(productIds), "createDevices" )
 	local hasBeenCreated = false
 	local roomId = luup.devices[ DEVICE_ID ].room_num or 0
-	for _, productId in ipairs( string_split( productIds, "|" ) ) do
-
+	for _, productId in ipairs( string_split( string_decodeURI( productIds ), "|" ) ) do
 		local protocol, protocolDeviceId, deviceTypeNames, settings, deviceName = unpack( string_split( productId, ";" ) )
 		deviceTypeNames = string_split( deviceTypeNames or "", ",", string_trim )
 		settings = string_split( settings or "", ",", string_trim )
+		-- TODO : si protocolDeviceId, mettre le dernier connu +1
 		local id = protocol .. ";" .. protocolDeviceId
 		local msg = "ZiBlue device '" .. id .. "'"
 		if ZiBlueDevices.getById( id ) then
