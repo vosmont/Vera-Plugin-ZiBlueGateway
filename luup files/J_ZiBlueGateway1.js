@@ -13,24 +13,13 @@
  */
 ( function( $ ) {
 	// UI7 fix
+
 	Utils.getDataRequestURL = function() {
 		var dataRequestURL = api.getDataRequestURL();
 		if ( dataRequestURL.indexOf( "?" ) === -1 ) {
 			dataRequestURL += "?";
 		}
 		return dataRequestURL;
-	};
-	// Custom CSS injection
-	Utils.injectCustomCSS = function( nameSpace, css ) {
-		if ( $( "#custom-css-" + nameSpace ).length === 0 ) {
-			Utils.logDebug( "Injects custom CSS for " + nameSpace );
-			var pluginStyle = $( '<style id="custom-css-' + nameSpace + '">' );
-			pluginStyle
-				.text( css )
-				.appendTo( "head" );
-		} else {
-			Utils.logDebug( "Injection of custom CSS has already been done for " + nameSpace );
-		}
 	};
 	Utils.performActionOnDevice = function( deviceId, service, action, actionArguments ) {
 		var d = $.Deferred();
@@ -64,7 +53,7 @@
 					}
 				},
 				onFailure: function( response ) {
-					Utils.logDebug( "[Utils.performActionOnDevice] ERROR(" + response.status + "): " + response.responseText );
+					Utils.logError( "[Utils.performActionOnDevice] ERROR(" + response.status + "): " + response.responseText );
 					d.reject();
 				}
 			} );
@@ -81,7 +70,7 @@
 				d.resolve();
 			},
 			onFailure: function() {
-				Utils.logDebug( "[Utils.setDeviceStateVariablePersistent] ERROR" );
+				Utils.logError( "[Utils.setDeviceStateVariablePersistent] ERROR" );
 				d.reject();
 			}
 		});
@@ -165,16 +154,14 @@
 		return d.promise();
 	};
 
-	if ( !String.prototype.format ) {
-		String.prototype.format = function() {
-			var content = this;
-			for (var i=0; i < arguments.length; i++) {
-				var replacement = new RegExp('\\{' + i + '\\}', 'g');
-				content = content.replace(replacement, arguments[i]);  
-			}
-			return content;
-		};
-	}
+	Utils.getLangStringFormat = function() {
+		var content = arguments[0];
+		for ( var i=1; i < arguments.length; i++ ) {
+			var replacement = new RegExp( '\\{' + (i-1) + '\\}', 'g' );
+			content = content.replace( replacement, arguments[i] );
+		}
+		return content;
+	};
 
 } ) ( jQuery );
 
@@ -936,7 +923,7 @@ var ZiBlueGateway = ( function( api, $ ) {
 	function _drawAddDevice() {
 		$.when( _getProtocolsInfosAsync() )
 			.done( function( protocolsInfos ) {
-				var html = 	'<h3>' + Utils.getLangString( "ziblue_add_new_device_step", "" ).format( 1 ) + ': ' + Utils.getLangString( "ziblue_add_new_device_settings_title" ) + '</h3>'
+				var html = 	'<h3>' + Utils.getLangStringFormat( "ziblue_add_new_device_step", 1 ) + ': ' + Utils.getLangString( "ziblue_add_new_device_settings_title" ) + '</h3>'
 					+		'<div class="zibluegateway-setting ui-widget-content ui-corner-all">'
 					+			'<span>' + Utils.getLangString( "ziblue_protocol" ) + '</span>'
 					+			'<select id="zibluegateway-setting-protocol" class="zibluegateway-setting-value" data-variable="protocol">'
@@ -1103,7 +1090,7 @@ var ZiBlueGateway = ( function( api, $ ) {
 		var html = '';
 		if ( protocolName != "" ) {
 			var step = 2;
-			html = '<h3>' + Utils.getLangString( "ziblue_add_new_device_step", "" ).format( step ) + ': ' + Utils.getLangString( "ziblue_add_new_device_teach_title" ) + '</h3>'
+			html = '<h3>' + Utils.getLangStringFormat( "ziblue_add_new_device_step", step ) + ': ' + Utils.getLangString( "ziblue_add_new_device_teach_title" ) + '</h3>'
 				+		'<div>'
 				+		( protocolName === "PARROT" ? Utils.getLangString( "ziblue_add_new_device_teach_parrot_explanation" ) : Utils.getLangString( "ziblue_add_new_device_teach_explanation" ) )
 				+		'</div>'
@@ -1112,7 +1099,7 @@ var ZiBlueGateway = ( function( api, $ ) {
 				+		'</div>';
 			if ( protocolName !== "PARROT" ) {
 				step = 3;
-				html +=	'<h3>' + Utils.getLangString( "ziblue_add_new_device_step", "" ).format( step ) + ': ' + Utils.getLangString( "ziblue_add_new_device_test_title" ) + '</h3>'
+				html +=	'<h3>' + Utils.getLangStringFormat( "ziblue_add_new_device_step", step ) + ': ' + Utils.getLangString( "ziblue_add_new_device_test_title" ) + '</h3>'
 					+	'<div>' + Utils.getLangString( "ziblue_add_new_device_test_explanation" ) + '</div>'
 					+	'<div>'
 					+		'<button type="button" class="zibluegateway-test-on">ON</button>'
@@ -1120,7 +1107,7 @@ var ZiBlueGateway = ( function( api, $ ) {
 					+	'</div>';
 			}
 			step++;
-			html +=		'<h3>' + Utils.getLangString( "ziblue_add_new_device_step", "" ).format( step ) + ': ' + Utils.getLangString( "ziblue_add_new_device_validate_title" ) + '</h3>'
+			html +=		'<h3>' + Utils.getLangStringFormat( "ziblue_add_new_device_step", step ) + ': ' + Utils.getLangString( "ziblue_add_new_device_validate_title" ) + '</h3>'
 				+		'<div>' + Utils.getLangString( "ziblue_add_new_device_validate_explanation" ) + '</div>'
 				+		'<div>'
 				+			'<button type="button" class="zibluegateway-create">' + Utils.getLangString( "ziblue_create" ) + '</button>'
