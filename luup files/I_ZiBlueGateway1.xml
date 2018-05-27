@@ -18,12 +18,12 @@
 	<incoming>
 		<lua>
 			-- If the 'startup' function hasn't run yet,
-			-- 'plugin' and 'handleIncoming' are not defined.
-			if ( not plugin or not plugin.handleIncoming ) then
+			-- 'plugin' and 'Network' are not defined.
+			if ( not plugin or not plugin.Network ) then
 				fc = fc + 1
 				luup.log( "(ZiBlueGateway::incoming) fc=" .. tostring(  fc) )
 			else
-				plugin.handleIncoming( lul_data )
+				plugin.Network.receive( lul_data )
 			end
 		</lua>
 	</incoming>
@@ -116,42 +116,42 @@
 			<serviceId>urn:upnp-org:serviceId:ZiBlueGateway1</serviceId>
 			<name>SendMessage</name>
 			<job>
-				return plugin.sendMessage( lul_settings.message )
+				return plugin.Main.startJob( plugin.Main.sendMessage, lul_settings.message )
 			</job>
 		</action>
 		<action>
 			<serviceId>urn:upnp-org:serviceId:ZiBlueGateway1</serviceId>
 			<name>Refresh</name>
 			<job>
-				return plugin.refresh()
+				return plugin.Main.startJob( plugin.Main.refresh )
 			</job>
 		</action>
 		<action>
 			<serviceId>urn:upnp-org:serviceId:ZiBlueGateway1</serviceId>
 			<name>CreateDevices</name>
 			<job>
-				return plugin.createDevices( lul_settings.productIds )
+				return plugin.Main.startJob( plugin.Main.createDevices, lul_settings.mappings )
 			</job>
 		</action>
 		<action>
 			<serviceId>urn:upnp-org:serviceId:ZiBlueGateway1</serviceId>
 			<name>TeachIn</name>
 			<run>
-				return plugin.teachIn( lul_settings.productId, lul_settings.action, lul_settings.comment )
-			</run>
-		</action>
-		<action>
-			<serviceId>urn:upnp-org:serviceId:ZiBlueGateway1</serviceId>
-			<name>Associate</name>
-			<run>
-				return plugin.associate( lul_settings.productId, lul_settings.feature, lul_settings.association )
+				return plugin.Main.startJob( plugin.Main.teachIn, lul_settings.productId, lul_settings.action, lul_settings.comment )
 			</run>
 		</action>
 		<action>
 			<serviceId>urn:upnp-org:serviceId:ZiBlueGateway1</serviceId>
 			<name>SetTarget</name>
 			<job>
-				return plugin.setTarget( lul_settings.productId, lul_settings.newTargetValue )
+				return plugin.Main.startJob( plugin.Main.setTarget, lul_settings.productId, lul_settings.newTargetValue )
+			</job>
+		</action>
+		<action>
+			<serviceId>urn:upnp-org:serviceId:ZiBlueGateway1</serviceId>
+			<name>SimulateJamming</name>
+			<job>
+				return plugin.Main.startJob( plugin.Main.simulateJamming, lul_settings.delay )
 			</job>
 		</action>
 	</actionList>

@@ -13,7 +13,6 @@
  */
 ( function( $ ) {
 	// UI7 fix
-
 	Utils.getDataRequestURL = function() {
 		var dataRequestURL = api.getDataRequestURL();
 		if ( dataRequestURL.indexOf( "?" ) === -1 ) {
@@ -89,7 +88,11 @@
 		if ( window.Localization ) {
 			window.Localization.init( tokens );
 		} else if ( window.langJson ) {
-			window.langJson.Tokens = $.extend( window.langJson.Tokens, tokens );
+			$.each( tokens, function( key, value ) {
+				if ( !window.langJson.Tokens[ key ] ) {
+					window.langJson.Tokens[ key ] = value;
+				}
+			});
 		}
 	};
 
@@ -155,7 +158,7 @@
 	};
 
 	Utils.getLangStringFormat = function() {
-		var content = arguments[0];
+		var content = Utils.getLangString( arguments[0] );
 		for ( var i=1; i < arguments.length; i++ ) {
 			var replacement = new RegExp( '\\{' + (i-1) + '\\}', 'g' );
 			content = content.replace( replacement, arguments[i] );
@@ -163,6 +166,16 @@
 		return content;
 	};
 
+} ) ( jQuery );
+
+
+/**
+ * ALTUI fixes
+ */
+( function( $ ) {
+	if ( window.Localization ) {
+		Utils.getLangString = function( token, defaultValue ) { return _T(token) || defaultValue; };
+	}
 } ) ( jQuery );
 
 
@@ -177,12 +190,15 @@ var ZiBlueGateway = ( function( api, $ ) {
 	var PLUGIN_CHILD_SID = "urn:upnp-org:serviceId:ZiBlueDevice1";
 	var _deviceId = null;
 	var _lastUpdate = 0;
-	var _indexFeatures = {}, _indexDevices = {};
-	var _selectedProductId = "";
-	var _selectedFeatureName = "";
+	var _indexMappings = {};
+	var _selectedDeviceId = "";
 	var _formerScrollTopPosition = 0;
-	var _devicesTimeout, _discoveredDevicesTimeout;
-	var _devicesLastRefresh = 0, _discoveredDevicesLastRefresh = 0;
+	var _equipmentsTimeout, _discoveredEquipmentsTimeout;
+	var _equipmentsLastRefresh = 0, _discoveredEquipmentsLastRefresh = 0;
+
+	// *************************************************************************************************
+	// Tools
+	// *************************************************************************************************
 
 	/**
 	 * Resources
@@ -219,30 +235,6 @@ var ZiBlueGateway = ( function( api, $ ) {
 	}
 
 	/**
-	 * Get informations on external devices
-	 */
-	function _getDevicesInfosAsync() {
-		var d = $.Deferred();
-		$.ajax( {
-			url: Utils.getDataRequestURL() + "id=lr_" + _pluginName + "&command=getDevicesInfos&output_format=json#",
-			dataType: "json"
-		} )
-		.done( function( devicesInfos ) {
-			if ( $.isPlainObject( devicesInfos ) ) {
-				d.resolve( devicesInfos );
-			} else {
-				Utils.logError( "No devices infos" );
-				d.reject();
-			}
-		} )
-		.fail( function( jqxhr, textStatus, errorThrown ) {
-			Utils.logError( "Get " + _pluginName + " devices infos error : " + errorThrown );
-			d.reject();
-		} );
-		return d.promise();
-	}
-
-	/**
 	 * Convert timestamp to locale string
 	 */
 	function _convertTimestampToLocaleString( timestamp ) {
@@ -273,23 +265,182 @@ var ZiBlueGateway = ( function( api, $ ) {
 		});
 	}
 
+	/**
+	 * Settings
+	 */
+	function _getSettingHtml( setting ) {
+		var className = _prefix + "-setting-value" + ( setting.className ? " " + setting.className : "" );
+		var html = '<div class="' + _prefix + '-setting ui-widget-content ui-corner-all">'
+			+			'<span>' + setting.name + '</span>';
+		if ( setting.type == "checkbox" ) {
+			html += '<input type="checkbox"'
+				+		( ( setting.value === true ) ? ' checked="checked"' : '' )
+				+		( ( setting.isReadOnly === true ) ? ' disabled="disabled"' : '' )
+				+		' class="' + className + '" data-setting="' + setting.variable  + '">';
+		} else if ( setting.type == "string" ) {
+			var value = ( setting.value ? setting.value : ( setting.defaultValue ? setting.defaultValue : '' ) );
+			html +=	'<input type="text" value="' + value + '" class="' + className + '" data-setting="' + setting.variable  + '">';
+		} else if ( setting.type == "select" ) {
+			html +=	'<select class="' + className + '" data-setting="' + setting.variable + '">';
+			$.each( setting.values, function( i, value ) {
+				var isSelected = false;
+				if ( typeof setting.value === "string" ) {
+					if ( value === setting.value ) {
+						isSelected = true;
+					}
+				} else if ( i === 0 ) {
+					isSelected = true;
+				}
+				html +=	'<option value="' + value + '"' + ( isSelected ? ' selected' : '' ) + '>' + value + '</option>';
+			} );
+			html +=	'</select>';
+		}
+		if ( setting.comment ) {
+			html +=	'<span class="' + _prefix + '-setting-comment">' + setting.comment + '</span>';
+		}
+		html +=	'</div>';
+		return html;
+	}
+
 	// *************************************************************************************************
-	// External devices
+	// Plugin settings
 	// *************************************************************************************************
 
-	function _stopDevicesRefresh() {
-		if ( _devicesTimeout ) {
-			window.clearTimeout( _devicesTimeout );
-		}
-		_devicesTimeout = null;
+	/**
+	 * Get settings
+	 */
+	function _getSettingsAsync() {
+		var d = $.Deferred();
+		api.showLoadingOverlay();
+		$.ajax( {
+			url: Utils.getDataRequestURL() + "id=lr_" + _pluginName + "&command=getSettings&output_format=json#",
+			dataType: "json"
+		} )
+		.done( function( settings ) {
+			api.hideLoadingOverlay();
+			if ( $.isPlainObject( settings ) ) {
+				d.resolve( settings );
+			} else {
+				Utils.logError( "No setting" );
+				d.reject();
+			}
+		} )
+		.fail( function( jqxhr, textStatus, errorThrown ) {
+			api.hideLoadingOverlay();
+			Utils.logError( "Get " + _pluginName + " settings infos error : " + errorThrown );
+			d.reject();
+		} );
+		return d.promise();
 	}
-	function _resumeDevicesRefresh() {
-		if ( _devicesTimeout == null ) {
-			var timeout = 3000 - ( Date.now() - _devicesLastRefresh );
+
+	/**
+	 * Show settings
+	 */
+	function _showSettings( deviceId ) {
+		if ( deviceId ) {
+			_deviceId = deviceId;
+		}
+		try {
+			$.when( _getSettingsAsync(), _loadResourcesAsync(), _loadLocalizationAsync() ).then( function( settings ) {
+				var html = '<div id="' + _prefix + '-plugin-settings" class="' + _prefix + '-panel">'
+					+		'<h1>' + Utils.getLangString( _prefix + "_plugin_settings" ) + '</h1>'
+					+		'<div class="scenes_section_delimiter"></div>'
+					+		'<div class="' + _prefix + '-toolbar">'
+					+			'<button type="button" class="' + _prefix + '-help"><i class="fa fa-question fa-lg text-info" aria-hidden="true"></i>&nbsp;' + Utils.getLangString( _prefix + "_help" ) + '</button>'
+					+		'</div>'
+					+		'<div class="' + _prefix + '-explanation ' + _prefix + '-hidden">'
+					+			Utils.getLangString( _prefix + "_explanation_plugin_settings" )
+					+		'</div>'
+					+		'<div>'
+					+			'<h3>System</h3>';
+				$.each( settings.system, function( i, setting ) {
+					html += _getSettingHtml({
+						type: "string",
+						variable: setting.name,
+						name: setting.name,
+						value: setting.value,
+						comment: setting.comment
+					});
+				});
+				html += 	'<div>'
+					+			'<h3>Radio Low</h3>';
+				$.each( settings.radio[0], function( i, setting ) {
+					html += _getSettingHtml({
+						type: "string",
+						variable: setting.name,
+						name: setting.name,
+						value: setting.value,
+						comment: ( setting.unit ? setting.unit : '' ) + ( setting.unit && setting.comment ? ' - ' : '' ) + ( setting.comment ? setting.comment : '' )
+					});
+				});
+				html += 	'<div>'
+					+			'<h3>Radio High</h3>';
+				$.each( settings.radio[1], function( i, setting ) {
+					html += _getSettingHtml({
+						type: "string",
+						variable: setting.name,
+						name: setting.name,
+						value: setting.value,
+						comment: ( setting.unit ? setting.unit : '' ) + ( setting.unit && setting.comment ? ' - ' : '' ) + ( setting.comment ? setting.comment : '' )
+					});
+				});
+				html +=		'</div>'
+					+	'</div>'
+				api.setCpanelContent( html );
+
+				// Manage UI events
+				$( "#" + _prefix + "-plugin-settings" )
+					.on( "click", "." + _prefix + "-help", function() {
+						$( this ).parent().next( "." + _prefix + "-explanation" ).toggleClass( _prefix + "-hidden" );
+					} )
+			});
+		} catch (err) {
+			Utils.logError( "Error in " + _pluginName + ".showSettings(): " + err );
+		}
+	}
+
+	// *************************************************************************************************
+	// Equipments
+	// *************************************************************************************************
+
+	/**
+	 * Get informations on equipments
+	 */
+	function _getEquipmentsInfosAsync() {
+		var d = $.Deferred();
+		$.ajax( {
+			url: Utils.getDataRequestURL() + "id=lr_" + _pluginName + "&command=getEquipmentsInfos&output_format=json#",
+			dataType: "json",
+			timeout: 1000
+		} )
+		.done( function( infos ) {
+			if ( $.isPlainObject( infos ) ) {
+				d.resolve( infos );
+			} else {
+				Utils.logError( "No equipments infos" );
+				d.reject();
+			}
+		} )
+		.fail( function( jqxhr, textStatus, errorThrown ) {
+			Utils.logError( "Get " + _pluginName + " equipments infos error : " + errorThrown );
+			d.reject();
+		} );
+		return d.promise();
+	}
+
+	function _stopEquipmentsRefresh() {
+		if ( _equipmentsTimeout ) {
+			window.clearTimeout( _equipmentsTimeout );
+		}
+		_equipmentsTimeout = null;
+	}
+	function _resumeEquipmentsRefresh() {
+		if ( _equipmentsTimeout == null ) {
+			var timeout = 3000 - ( Date.now() - _equipmentsLastRefresh );
 			if ( timeout < 0 ) {
 				timeout = 0;
 			}
-			_devicesTimeout = window.setTimeout( _drawDevicesList, timeout );
+			_equipmentsTimeout = window.setTimeout( _drawEquipmentsList, timeout );
 		}
 	}
 
@@ -300,7 +451,7 @@ var ZiBlueGateway = ( function( api, $ ) {
 				pressType = "long";
 			}
 			return	'<span class="' + _prefix + '-association ' + _prefix + '-association-' + associationType + '" title="' + associationType + ' associated with ' + pressType + ' press">'
-				+		'<span class="ziblue-' + pressType + '-press">'
+				+		'<span class="' + _prefix + '-' + pressType + '-press">'
 				+			association[ level ].join( "," )
 				+		'</span>'
 				+	'</span>';
@@ -309,28 +460,35 @@ var ZiBlueGateway = ( function( api, $ ) {
 	}
 
 	/**
-	 * Draw and manage external device list
+	 * Draw and manage equipments list
 	 */
-	function _drawDevicesList() {
-		_stopDevicesRefresh();
-		if ( $( "#" + _prefix + "-known-devices" ).length === 0 ) {
+	function _drawEquipmentsList() {
+		_stopEquipmentsRefresh();
+		if ( $( "#" + _prefix + "-known-equipments" ).length === 0 ) {
+			// The panel is no more here
 			return;
 		}
-		_indexFeatures = {}; _indexDevices = {};
-		$.when( _getDevicesInfosAsync() )
-			.done( function( devicesInfos ) {
-				if ( devicesInfos.devices.length > 0 ) {
-					$.each( devicesInfos.devices, function( i, device ) {
-						var room = api.getRoomObject( device.mainRoomId );
-						device.roomName = room ? room.name : 'unknown';
+		if ( !$( "#" + _prefix + "-known-equipments" ).is( ":visible" ) ) {
+			// The panel is hidden
+			_equipmentsLastRefresh = Date.now();
+			_resumeEquipmentsRefresh();
+			return;
+		}
+		_indexMappings = {};
+		$.when( _getEquipmentsInfosAsync() )
+			.done( function( infos ) {
+				if ( infos.equipments.length > 0 ) {
+					$.each( infos.equipments, function( i, equipment ) {
+						var haRoom = api.getRoomObject( equipment.mainRoomId );
+						equipment.roomName = haRoom ? haRoom.name : 'unknown';
 					});
-					// Sort the devices by room / name
-					devicesInfos.devices.sort( function( a, b ) {
-						if ( a.protocol === b.protocol ) {
-							var x = a.roomName.toLowerCase(), y = b.roomName.toLowerCase();
+					// Sort the equipments by room / name
+					infos.equipments.sort( function( e1, e2 ) {
+						if ( e1.protocol === e2.protocol ) {
+							var x = e1.roomName.toLowerCase(), y = e2.roomName.toLowerCase(); // TODO ????
 							return x < y ? -1 : x > y ? 1 : 0;
 						}
-						return a.protocol < b.protocol ? -1 : a.protocol > b.protocol ? 1 : 0;
+						return e1.protocol < e2.protocol ? -1 : e1.protocol > e2.protocol ? 1 : 0;
 					});
 					
 					var html =	'<table><tr>'
@@ -340,109 +498,87 @@ var ZiBlueGateway = ( function( api, $ ) {
 						+			'<th>' + Utils.getLangString( _prefix + "_signal_quality" ) + '</th>'
 						+			'<th>' + Utils.getLangString( _prefix + "_last_update" ) + '</th>'
 						+			'<th>' + Utils.getLangString( _prefix + "_feature" ) + '</th>'
-						+			'<th>' + Utils.getLangString( _prefix + "_device" ) + '</th>'
-						+			'<th>' + Utils.getLangString( _prefix + "_association" ) + '</th>'
-						+			'<th>' + Utils.getLangString( _prefix + "_action" ) + '</th>'
 						+		'</tr>';
-					$.each( devicesInfos.devices, function( i, device ) {
-						var rowSpan = ( device.features.length > 1 ? ' rowspan="' + device.features.length + '"' : '' );
-						html += '<tr>'
-							+		'<td class="' + _prefix + '-room-name"' + rowSpan + '>' + device.roomName + '</td>'
-							+		'<td class="' + _prefix + '-protocol-name"' + rowSpan + '>' + device.protocol + '</td>'
-							+		'<td class="' + _prefix + '-protocol-id"' + rowSpan + '>' + device.protocolDeviceId + '</td>'
-							+		'<td' + rowSpan + '>' + ( device.rfQuality >= 0 ? device.rfQuality : '' ) + '</td>'
-							+		'<td' + rowSpan + '>' + _convertTimestampToLocaleString( device.lastUpdate ) + '</td>';
-						var isFirstRow = true;
-
-						device.features.sort( function( a, b ) {
-							if ( a.deviceName < b.deviceName ) {
+					$.each( infos.equipments, function( i, equipment ) {
+						html += '<tr class="' + _prefix + '-known-equipment">'
+							+		'<td class="' + _prefix + '-room-name">' + equipment.roomName + '</td>'
+							+		'<td class="' + _prefix + '-protocol-name">' + equipment.protocol + '</td>'
+							+		'<td class="' + _prefix + '-protocol-id">' + equipment.id + ( equipment.isNew ? ' <span style="color:red">NEW</span>' : '' ) + '</td>'
+							+		'<td>' + ( equipment.quality >= 0 ? equipment.quality : '' ) + '</td>'
+							+		'<td>' + _convertTimestampToLocaleString( equipment.lastUpdate ) + '</td>'
+							+		'<td>'
+/*
+						// Sort features of the equipment by linked device names
+						equipment.features.sort( function( e1, e2 ) {
+							var nameA = api.getDeviceObject( e1.deviceId ).name.toLowerCase();
+							var nameB = api.getDeviceObject( e2.deviceId ).name.toLowerCase();
+							if ( nameA < nameB ) {
 								return -1;
-							} else if ( a.deviceName > b.deviceName ) {
+							} else if ( nameA > nameB ) {
 								return 1;
 							}
 							return 0;
 						});
+*/
+						html +=			'<div class="' + _prefix + '-equipment-mappings">';
+						$.each( equipment.mappings, function( i, mapping ) {
+							html +=			'<div class="' + _prefix + '-equipment-mapping">';
 
-						var countDevices = {};
-						$.each( device.features, function( i, feature ) {
-							countDevices[ feature.deviceId.toString() ] = countDevices[ feature.deviceId.toString() ]  != null ? countDevices[ feature.deviceId.toString() ] + 1 : 1;
+							html +=				'<div class="' + _prefix + '-features">';
+							$.each( mapping.features, function( featureName, feature ) {
+								html +=				'<div class="' + _prefix + '-feature">'
+									+					'<span class="' + _prefix + '-feature-name">' + featureName + '</span>'
+									+					( feature.state ? '<span class="' + _prefix + '-feature-state">' + feature.state + '</span>' : '' )
+									+					( feature.comment ? '<div class="' + _prefix + '-feature-comment">' + feature.comment + '</div>' : '' )
+									+				'</div>';
+							});
+							html +=				'</div>';
+
+							var device = mapping.device;
+							_indexMappings[ device.id.toString() ] = [ equipment, mapping ];
+							var haDevice = api.getDeviceObject( device.id );
+							html +=				'<i class="' + _prefix + '-device-actions fa fa-caret-down fa-lg" aria-hidden="true" data-device-id="' + device.id + '"></i>'
+								+				'<div class="' + _prefix + '-device-type">'
+								+					'<div><span class="' + _prefix + '-device-name">' + haDevice.name + '</span> (#' + device.id + ')</div>'
+								+					'<div>'
+								+						Utils.getLangString( haDevice.device_type )
+								+						( device.settings.pulse ? ' PULSE' : '' )
+								+						( device.settings.toggle ? ' TOGGLE' : '' )
+								+					'</div>'
+								+					'<div class="' + _prefix + '-device-association">'
+								+						_getAssociationHtml( "device", device.association.devices, 0 )
+								//+						_getAssociationHtml( "device", device.association.devices, 1 )
+								+						_getAssociationHtml( "scene", device.association.scenes, 0 )
+								//+						_getAssociationHtml( "scene", device.association.scenes, 1 )
+								+						_getAssociationHtml( "equipment", device.association.equipments, 0 )
+								+					'</div>'
+								+				'</div>'
+								+			'</div>';
 						});
-
-						var lastDeviceId = -1;
-						var deviceRowSpan = '1';
-						$.each( device.features, function( i, feature ) {
-							var productId = device.protocol + ';' + device.protocolDeviceId;
-							_indexFeatures[ productId + ';' + feature.name ] = feature;
-							_indexDevices[ feature.deviceId.toString() ] = device.protocol;
-							if ( !feature.settings ) {
-								feature.settings = {};
-							}
-							/*feature.settings = {};
-							$.each( ( api.getDeviceStateVariable( feature.deviceId, PLUGIN_CHILD_SID, "Setting", { dynamic: false } ) || "" ).split( "," ), function( i, settingName ) {
-								feature.settings[ settingName ] = true;
-							} );*/
-							if ( !isFirstRow ) {
-								html += '<tr>';
-							}
-							html +=	'<td>'
-								//+		'<div class="' + _prefix + '-device-channel">'
-								//
-								+		'<div class="' + _prefix + '-feature-name">' + feature.name + '</div>'
-								+		( feature.comment ? '<div class="' + _prefix + '-feature-state">' + feature.comment + '</div>' : '' )
-								+		( feature.state ? '<div class="' + _prefix + '-feature-state">' + feature.state + '</div>' : '' )
-								+	'</td>';
-
-							if ( feature.deviceId != lastDeviceId ) {
-								lastDeviceId = feature.deviceId;
-								deviceRowSpan = ' rowspan="' + countDevices[ feature.deviceId.toString() ] + '"';
-								html +=	'<td' + deviceRowSpan +'>'
-									//+			'<div class="' + _prefix + '-device-type">'
-									+		'<div><span class="' + _prefix + '-device-name">' + feature.deviceName + '</span> (#' + feature.deviceId + ')</div>'
-									+		'<div>'
-									+				Utils.getLangString( feature.deviceTypeName )
-									+				( device.isNew ? ' <span style="color:red">NEW</span>' : '' )
-									+				( feature.settings.pulse ? ' PULSE' : '' )
-									+				( feature.settings.toggle ? ' TOGGLE' : '' )
-									+		'</div>'
-									//+		'</div>'
-									+	'</td>'
-									+	'<td' + deviceRowSpan +'>'
-									+		_getAssociationHtml( "device", feature.association.devices, 0 )
-									//+		_getAssociationHtml( "device", feature.association.devices, 1 )
-									+		_getAssociationHtml( "scene", feature.association.scenes, 0 )
-									//+		_getAssociationHtml( "scene", feature.association.scenes, 1 )
-									+		_getAssociationHtml( "ziblue-device", feature.association.ziBlueDevices, 0 )
-									+	'</td' + deviceRowSpan +'>'
-									+	'<td' + deviceRowSpan +' align="center">'
-									//+		( !device.isNew && ( feature.settings.button || feature.settings.receiver ) ?
-									+		( !device.isNew ?
-												'<i class="' + _prefix + '-actions fa fa-caret-down fa-lg" aria-hidden="true" data-product-id="' + productId + '" data-feature-name="' + feature.name + '"></i>'
-												: '' )
-									+	'</td>';
-							}
-							html +=	'</tr>';
-							isFirstRow = false;
-						} );
+						html +=			'</div>'
+							+		'</td>'
+							+	'</tr>';
 					});
 					html += '</table>';
-					$("#" + _prefix + "-known-devices").html( html );
+					$("#" + _prefix + "-known-equipments").html( html );
 				} else {
-					$("#" + _prefix + "-known-devices").html( Utils.getLangString( _prefix + "_no_device" ) );
+					$("#" + _prefix + "-known-equipments").html( Utils.getLangString( _prefix + "_no_equipment" ) );
 				}
-				_devicesLastRefresh = Date.now();
-				_resumeDevicesRefresh();
+				_equipmentsLastRefresh = Date.now();
+				_resumeEquipmentsRefresh();
 			} );
 	}
 
 	/**
-	 * Show the actions that can be done on an external device
+	 * Show the actions that can be done on an equipment
 	 */
-	function _showDeviceActions( position, settings ) {
-		_stopDevicesRefresh();
+	function _showEquipmentActions( position, equipment, mapping ) {
+		_stopEquipmentsRefresh();
+		var settings = mapping.device.settings;
 		var html = '<table>'
 				+		'<tr>'
 				+			'<td>'
-				+				( settings.button ?
+				+				( settings.transmitter ?
 								'<button type="button" class="' + _prefix + '-show-association">Associate</button>'
 								: '')
 				+				'<button type="button" class="' + _prefix + '-show-params">Params</button>'
@@ -455,23 +591,24 @@ var ZiBlueGateway = ( function( api, $ ) {
 		}
 		html +=			'</tr>'
 			+		'</table>';
-		var $actions = $( "#" + _prefix + "-device-actions" );
+		var $actions = $( "#" + _prefix + "-equipments-actions" );
 		$actions
 			.html( html )
-			.css( {
-				"display": "block",
-				"left": ( position.left - $actions.width() + 5 ),
-				"top": ( position.top - $actions.height() / 2 )
-			} );
+			.data( "equipment", equipment )
+			.data( "mapping", mapping )
+			.css({ "display": "block" });
+		position.left -= $actions.outerWidth() + 5;
+		position.top -= $actions.outerHeight() / 2;
+		$actions.offset( position );
 	}
 
 	/**
 	 * Show all devices and scene that can be associated and manage associations
 	 */
-	function _showDeviceAssociation( productId, feature ) {
-		_stopDevicesRefresh();
+	function _showEquipmentAssociation( equipment, mapping ) {
+		_stopEquipmentsRefresh();
 		var html = '<h1>' + Utils.getLangString( _prefix + "_association" ) + '</h1>'
-				+	'<h3>' + productId + ' - ' + feature.name + ' - ' + feature.deviceName + ' (#' + feature.deviceId + ')</h3>'
+				+	'<h3>' + equipment.protocol + ' - ' + equipment.id + " - " + Object.keys( mapping.features ).join( "," ) + ' (#' + mapping.device.id + ')</h3>'
 				+	'<div class="scenes_section_delimiter"></div>'
 				+	'<div class="' + _prefix + '-toolbar">'
 				+		'<button type="button" class="' + _prefix + '-help"><i class="fa fa-question fa-lg text-info" aria-hidden="true"></i>&nbsp;' + Utils.getLangString( _prefix + "_help" ) + '</button>'
@@ -480,49 +617,49 @@ var ZiBlueGateway = ( function( api, $ ) {
 				+		Utils.getLangString( _prefix + "_explanation_association" )
 				+	'</div>';
 
-		// Get compatible devices
-		var protocol = _indexDevices[ feature.deviceId.toString() ];
+		// Get compatible devices in the HA controller
 		var devices = [];
-		$.each( api.getListOfDevices(), function( i, device ) {
-			if ( device.id == feature.deviceId ) {
+		$.each( api.getListOfDevices(), function( i, luDevice ) {
+			if ( luDevice.id == mapping.device.id ) {
 				return;
 			}
-			// Check if device is an external device with same protocol
-			var isExternal = false;
-			if ( device.id_parent === _deviceId ) {
-				if ( _indexDevices[ device.id.toString() ] == protocol ) {
-					isExternal = true;
+			// Check if device is an equipment with same protocol
+			var isEquipment = false;
+			if ( luDevice.id_parent === _deviceId ) {
+				var index = _indexMappings[ luDevice.id.toString() ];
+				if ( index && ( index[0].protocol == equipment.protocol ) ) {
+					isEquipment = true;
 				}
 			}
 			// Check if device is compatible
 			var isCompatible = false;
-			for ( var j = 0; j < device.states.length; j++ ) {
-				if ( ( device.states[j].service === SWP_SID ) || ( device.states[j].service === SWD_SID ) ) {
+			for ( var j = 0; j < luDevice.states.length; j++ ) {
+				if ( ( luDevice.states[j].service === SWP_SID ) || ( luDevice.states[j].service === SWD_SID ) ) {
 					// Device can be switched or dimmed
 					isCompatible = true;
 					break;
 				}
 			}
-			if ( !isExternal && !isCompatible ) {
+			if ( !isEquipment && !isCompatible ) {
 				return;
 			}
 			
-			var room = ( device.room ? api.getRoomObject( device.room ) : null );
-			if ( isExternal ) {
+			var room = ( luDevice.room ? api.getRoomObject( luDevice.room ) : null );
+			if ( isEquipment ) {
 				devices.push( {
-					"id": device.id,
+					"id": luDevice.id,
 					"roomName": ( room ? room.name : "_No room" ),
-					"name": "(ZiBlue) " + device.name,
+					"name": "(" + _prefix + ") " + luDevice.name,
 					"type": 3,
-					"isExternal": isExternal
+					"isEquipment": isEquipment
 				} );
 			} else {
 				devices.push( {
-					"id": device.id,
+					"id": luDevice.id,
 					"roomName": ( room ? room.name : "_No room" ),
-					"name": device.name,
+					"name": luDevice.name,
 					"type": 2,
-					"isExternal": isExternal
+					"isEquipment": isEquipment
 				} );
 			}
 		} );
@@ -555,7 +692,7 @@ var ZiBlueGateway = ( function( api, $ ) {
 			if ( level === 1 ) {
 				pressType = "long";
 			}
-			return	'<span class="ziblue-' + pressType + '-press" title="' + pressType + ' press">'
+			return	'<span class="' + _prefix + '-' + pressType + '-press" title="' + pressType + ' press">'
 				+		'<input type="checkbox"' + ( association && ( $.inArray( parseInt( deviceId, 10 ), association[level] ) > -1 ) ? ' checked="checked"' : '' ) + '>'
 				+	'</span>';
 		}
@@ -570,16 +707,16 @@ var ZiBlueGateway = ( function( api, $ ) {
 				// Scene
 				html += '<div class="' + _prefix + '-association ' + _prefix + '-association-scene" data-scene-id="' + device.id + '">'
 					+		'<label>'
-					+			_getCheckboxHtml( device.id, feature.association.scenes, 0 )
-					//+			_getCheckboxHtml( device.id, feature.association.scenes, 1 )
+					+			_getCheckboxHtml( device.id, mapping.device.association.scenes, 0 )
+					//+			_getCheckboxHtml( device.id, mapping.device.association.scenes, 1 )
 					+			'&nbsp;' + device.name + ' (#' + device.id + ')'
 					+		'</label>'
 					+	'</div>';
 			} else if ( device.type === 3 ) {
-				// ZiBlue : declared association
-				html += '<div class="ziblue-association ziblue-association-zibluedevice" data-device-id="' + device.id + '">'
+				// Declared association between equipments
+				html += '<div class="' + _prefix + '-association ' + _prefix + '-association-equipment" data-device-id="' + device.id + '">'
 					+		'<label>'
-					+			_getCheckboxHtml( device.id, feature.association.ziBlueDevices, 0 )
+					+			_getCheckboxHtml( device.id, mapping.device.association.equipments, 0 )
 					+			'&nbsp;' + device.name + ' (#' + device.id + ')'
 					+		'</label>'
 					+	'</div>';
@@ -587,8 +724,8 @@ var ZiBlueGateway = ( function( api, $ ) {
 				// Classic device (e.g. Z-wave)
 				html += '<div class="' + _prefix + '-association ' + _prefix + '-association-device" data-device-id="' + device.id + '">'
 					+		'<label>'
-					+			_getCheckboxHtml( device.id, feature.association.devices, 0 )
-					//+			_getCheckboxHtml( device.id, feature.association.devices, 1 )
+					+			_getCheckboxHtml( device.id, mapping.device.association.devices, 0 )
+					//+			_getCheckboxHtml( device.id, mapping.device.association.devices, 1 )
 					+			'&nbsp;' + device.name + ' (#' + device.id + ')'
 					+		'</label>'
 					+	'</div>';
@@ -600,7 +737,7 @@ var ZiBlueGateway = ( function( api, $ ) {
 			+		'<button type="button" class="' + _prefix + '-associate"><i class="fa fa-check fa-lg text-success" aria-hidden="true"></i>&nbsp;'  + Utils.getLangString( _prefix + "_confirm" ) + '</button>'
 			+	'</div>';
 
-		$( "#" + _prefix + "-device-association" )
+		$( "#" + _prefix + "-equipments-association" )
 			.html( html )
 			.css( {
 				"display": "block"
@@ -609,8 +746,8 @@ var ZiBlueGateway = ( function( api, $ ) {
 		_formerScrollTopPosition = $( window ).scrollTop();
 		$( window ).scrollTop( $( "#" + _prefix + "-known-panel" ).offset().top - 150 );
 	}
-	function _hideDeviceAssociation() {
-		$( "#" + _prefix + "-device-association" )
+	function _hideEquipmentAssociation() {
+		$( "#" + _prefix + "-equipments-association" )
 			.css( {
 				"display": "none",
 				"min-height": $( "#" + _prefix + "-known-panel" ).height()
@@ -619,46 +756,54 @@ var ZiBlueGateway = ( function( api, $ ) {
 			$( window ).scrollTop( _formerScrollTopPosition );
 		}
 	}
-	function _setDeviceAssociation() {
+	function _setEquipmentAssociation() {
 		function _getEncodedAssociation() {
 			var associations = [];
-			$("#" + _prefix + "-device-association ." + _prefix + "-association-device input:checked").each( function() {
+			// Classic device
+			$("#" + _prefix + "-equipments-association ." + _prefix + "-association-device input:checked").each( function() {
 				var deviceId = $( this ).parents( "." + _prefix + "-association-device" ).data( "device-id" );
-				if ( $( this ).parent().hasClass( "ziblue-long-press" ) ) {
+				if ( $( this ).parent().hasClass( _prefix + "-long-press" ) ) {
 					associations.push( "+" + deviceId );
 				} else {
 					associations.push( deviceId );
 				}
 			});
-			$("#" + _prefix + "-device-association ." + _prefix + "-association-scene input:checked").each( function() {
+			// Scene
+			$("#" + _prefix + "-equipments-association ." + _prefix + "-association-scene input:checked").each( function() {
 				var sceneId = $( this ).parents( "." + _prefix + "-association-scene" ).data( "scene-id" );
-				if ( $( this ).parent().hasClass( "ziblue-long-press" ) ) {
+				if ( $( this ).parent().hasClass( _prefix + "-long-press" ) ) {
 					associations.push( "+*" + sceneId );
 				} else {
 					associations.push( "*" + sceneId );
 				}
 			});
-			$("#" + _prefix + "-device-association ." + _prefix + "-association-zibluedevice input:checked").each( function() {
-				var deviceId = $( this ).parents( "." + _prefix + "-association-zibluedevice" ).data( "device-id" );
+			// Device linked to an equipment
+			$("#" + _prefix + "-equipments-association ." + _prefix + "-association-equipment input:checked").each( function() {
+				var deviceId = $( this ).parents( "." + _prefix + "-association-equipment" ).data( "device-id" );
 				associations.push( "%" + deviceId );
 			});
 			return associations.join( "," );
 		}
 
-		$.when( _performActionAssociate( _selectedProductId, _selectedFeatureName, _getEncodedAssociation() ) )
+		var mapping = $( "#" + _prefix + "-equipments-actions" ).data( "mapping" );
+		$.when(
+			Utils.setDeviceStateVariablePersistent( mapping.device.id, PLUGIN_CHILD_SID, "Association", _getEncodedAssociation() ),
+			_performActionRefresh()
+		)
 			.done( function() {
-				_resumeDevicesRefresh();
-				_hideDeviceAssociation();
+				_resumeEquipmentsRefresh();
+				_hideEquipmentAssociation();
 			});
 	}
 
 	/**
-	 * Show parameters for an external device
+	 * Show parameters for an equipment
 	 */
-	function _showDeviceParams( productId, feature ) {
-		_stopDevicesRefresh();
+	function _showEquipmentParams( equipment, mapping ) {
+		_stopEquipmentsRefresh();
+		var settings = mapping.device.settings;
 		var html = '<h1>' + Utils.getLangString( _prefix + "_param" ) + '</h1>'
-				+	'<h3>' + productId + ' - ' + feature.deviceName + ' (#' + feature.deviceId + ')</h3>'
+				+	'<h3>' + equipment.protocol + ' - ' + equipment.id + " - " + Object.keys( mapping.features ).join( "," ) + ' (#' + mapping.device.id + ')</h3>'
 				+	'<div class="scenes_section_delimiter"></div>'
 				+	'<div class="' + _prefix + '-toolbar">'
 				+		'<button type="button" class="' + _prefix + '-help"><i class="fa fa-question fa-lg text-info" aria-hidden="true"></i>&nbsp;' + Utils.getLangString( _prefix + "_help" ) + '</button>'
@@ -672,18 +817,18 @@ var ZiBlueGateway = ( function( api, $ ) {
 			+		_getSettingHtml({
 						type: "checkbox",
 						className: _prefix + "-hider",
-						variable: "button",
-						name: "Button",
-						value: feature.settings.button
+						variable: "transmitter",
+						name: "Transmitter",
+						value: settings.transmitter
 					})
 			+	'</h3>'
-			+	'<div class="' + _prefix + '-hideable"' + ( !feature.settings.button ? ' style="display: none;"' : '' ) + '>';
+			+	'<div class="' + _prefix + '-hideable"' + ( !settings.transmitter ? ' style="display: none;"' : '' ) + '>';
 		$.each( [ [ 'pulse', 'Pulse' ], [ 'toggle', 'Toggle' ] ], function( i, param ) {
 			html += _getSettingHtml({
 				type: "checkbox",
 				variable: param[0],
 				name: param[1],
-				value: feature.settings[ param[0] ]
+				value: settings[ param[0] ]
 			});
 		});
 		html += '</div>';
@@ -695,24 +840,24 @@ var ZiBlueGateway = ( function( api, $ ) {
 						className: _prefix + "-hider",
 						variable: "receiver",
 						name: "Receiver",
-						value: feature.settings.receiver
+						value: settings.receiver
 					})
 			+	'</h3>'
-			+	'<div class="' + _prefix + '-hideable"' + ( !feature.settings.receiver ? ' style="display: none;"' : '' ) + '>';
+			+	'<div class="' + _prefix + '-hideable"' + ( !settings.receiver ? ' style="display: none;"' : '' ) + '>';
 		$.each( [ [ 'qualifier', 'Qualifier' ], [ 'burst', 'Burst' ] ], function( i, param ) {
 			html += _getSettingHtml({
 				type: "string",
 				variable: param[0],
 				name: param[1],
-				value: feature.settings[ param[0] ]
+				value: settings[ param[0] ]
 			});
 		});
 		html += '</div>';
 
 		// Specific
 		var specificHtml = '';
-		$.each( feature.settings, function( paramName, paramValue ) {
-			if ( $.inArray( paramName, [ 'button', 'pulse', 'toggle', 'receiver', 'qualifier', 'burst' ] ) === -1 ) {
+		$.each( settings, function( paramName, paramValue ) {
+			if ( $.inArray( paramName, [ 'transmitter', 'pulse', 'toggle', 'receiver', 'qualifier', 'burst' ] ) === -1 ) {
 				specificHtml += _getSettingHtml({
 					type: ( ( typeof paramValue == "boolean" ) ? "checkbox" : "string" ),
 					isReadOnly: true,
@@ -736,9 +881,9 @@ var ZiBlueGateway = ( function( api, $ ) {
 			+		'<button type="button" class="' + _prefix + '-set"><i class="fa fa-check fa-lg text-success" aria-hidden="true"></i>&nbsp;'  + Utils.getLangString( _prefix + "_confirm" ) + '</button>'
 			+	'</div>';
 
-		$( "#" + _prefix + "-device-params" )
+		$( "#" + _prefix + "-equipments-params" )
 			.html( html )
-			.data( 'feature', feature )
+			.data( 'device', mapping.device )
 			.css( {
 				"display": "block",
 				"min-height": $( "#" + _prefix + "-known-panel" ).height()
@@ -753,8 +898,8 @@ var ZiBlueGateway = ( function( api, $ ) {
 		_formerScrollTopPosition = $( window ).scrollTop();
 		$( window ).scrollTop( $( "#" + _prefix + "-known-panel" ).offset().top - 150 );
 	}
-	function _hideDeviceParams() {
-		$( "#" + _prefix + "-device-params" )
+	function _hideEquipmentParams() {
+		$( "#" + _prefix + "-equipments-params" )
 			.css( {
 				"display": "none"
 			} );
@@ -762,17 +907,17 @@ var ZiBlueGateway = ( function( api, $ ) {
 			$( window ).scrollTop( _formerScrollTopPosition );
 		}
 	}
-	function _setDeviceParams() {
-		var feature = $( "#" + _prefix + "-device-params" ).data( "feature" );
-		feature.settings = {};
-		$( "#" + _prefix + "-device-params ." + _prefix + "-setting-value:visible" ).each( function() {
+	function _setEquipmentParams() {
+		var device = $( "#" + _prefix + "-equipments-params" ).data( "device" );
+		device.settings = {};
+		$( "#" + _prefix + "-equipments-params ." + _prefix + "-setting-value:visible" ).each( function() {
 			var settingName = $( this ).data( "setting" );
 			var settingValue = $( this ).is( ":checkbox" ) ? $( this ).is( ":checked" ) : $( this ).val();
 			if ( settingName && ( settingValue !== "" ) ) {
-				feature.settings[ settingName ] = settingValue;
+				device.settings[ settingName ] = settingValue;
 			}
 		});
-		var setting = $.map( feature.settings, function( value, key ) {
+		var setting = $.map( device.settings, function( value, key ) {
 			if ( typeof value == "boolean" ) {
 				return ( value === true ) ? key : null;
 			} else {
@@ -780,19 +925,19 @@ var ZiBlueGateway = ( function( api, $ ) {
 			}
 		});
 		$.when(
-			Utils.setDeviceStateVariablePersistent( feature.deviceId, PLUGIN_CHILD_SID, "Setting", setting.join( "," ) ),
+			Utils.setDeviceStateVariablePersistent( device.id, PLUGIN_CHILD_SID, "Setting", setting.join( "," ) ),
 			_performActionRefresh()
 		)
 			.done( function() {
-				_resumeDevicesRefresh();
-				_hideDeviceParams();
+				_resumeEquipmentsRefresh();
+				_hideEquipmentParams();
 			});
 	}
 
 	/**
-	 * Show external devices
+	 * Show equipments
 	 */
-	function _showDevices( deviceId ) {
+	function _showEquipments( deviceId ) {
 		if ( deviceId ) {
 			_deviceId = deviceId;
 		}
@@ -800,21 +945,22 @@ var ZiBlueGateway = ( function( api, $ ) {
 			$.when( _loadResourcesAsync(), _loadLocalizationAsync() ).then( function() {
 				api.setCpanelContent(
 						'<div id="' + _prefix + '-known-panel" class="' + _prefix + '-panel">'
-					+		'<h1>' + Utils.getLangString( _prefix + "_managed_devices" ) + '</h1>'
+					+		'<h1>' + Utils.getLangString( _prefix + "_managed_equipments" ) + '</h1>'
 					+		'<div class="scenes_section_delimiter"></div>'
 					+		'<div class="' + _prefix + '-toolbar">'
 					+			'<button type="button" class="' + _prefix + '-help"><i class="fa fa-question fa-lg text-info" aria-hidden="true"></i>&nbsp;' + Utils.getLangString( _prefix + "_help" ) + '</button>'
+					//+			'<button type="button" class="' + _prefix + '-add"><i class="fa fa-plus fa-lg text-info" aria-hidden="true"></i>&nbsp;' + Utils.getLangString( _prefix + "_add" ) + '</button>'
 					+			'<button type="button" class="' + _prefix + '-refresh"><i class="fa fa-refresh fa-lg" aria-hidden="true"></i>&nbsp;' + Utils.getLangString( _prefix + "_refresh" ) + '</button>'
 					+		'</div>'
 					+		'<div class="' + _prefix + '-explanation ' + _prefix + '-hidden">'
-					+			Utils.getLangString( _prefix + "_explanation_known_devices" )
+					+			Utils.getLangString( _prefix + "_explanation_known_equipments" )
 					+		'</div>'
-					+		'<div id="' + _prefix + '-known-devices" class="' + _prefix + '-devices">'
+					+		'<div id="' + _prefix + '-known-equipments" class="' + _prefix + '-equipments">'
 					+			Utils.getLangString( _prefix + "_loading" )
 					+		'</div>'
-					+		'<div id="' + _prefix + '-device-actions" style="display: none;"></div>'
-					+		'<div id="' + _prefix + '-device-association" style="display: none;"></div>'
-					+		'<div id="' + _prefix + '-device-params" style="display: none;"></div>'
+					+		'<div id="' + _prefix + '-equipments-actions" style="display: none;"></div>'
+					+		'<div id="' + _prefix + '-equipments-association" style="display: none;"></div>'
+					+		'<div id="' + _prefix + '-equipments-params" style="display: none;"></div>'
 					+	'</div>'
 				);
 
@@ -826,68 +972,76 @@ var ZiBlueGateway = ( function( api, $ ) {
 					.on( "click", "." + _prefix + "-refresh", function() {
 						$.when( _performActionRefresh() )
 							.done( function() {
-								_drawDevicesList();
+								_drawEquipmentsList();
 							});
 					} )
-					.on( "click", "." + _prefix + "-add", function() { _showAddDevice(); } )
+					//.on( "click", "." + _prefix + "-add", function() { _showAddEquipment(); } )
 					.click( function() {
-						$( "#" + _prefix + "-device-actions" ).css( "display", "none" );
+						$( "#" + _prefix + "-equipments-actions" ).css( "display", "none" );
 					} )
-					.on( "click", "." + _prefix + "-actions", function( e ) {
-						var position = $( this ).position();
-						position.left = position.left + $( this ).outerWidth();
-						_selectedProductId = $( this ).data( "product-id" );
-						_selectedFeatureName = $( this ).data( "feature-name" );
-						var selectedFeature = _indexFeatures[ _selectedProductId + ";" + _selectedFeatureName ];
-						if ( selectedFeature ) {
-							_showDeviceActions( position, selectedFeature.settings );
+					.on( "click", "." + _prefix + "-device-actions", function( e ) {
+						var position = $( this ).offset();
+						position.left += $( this ).outerWidth() / 2;
+						position.top += $( this ).outerHeight() / 2;
+						_selectedDeviceId = $( this ).data( "device-id" );
+						var index = _indexMappings[ _selectedDeviceId ];
+						if ( index ) {
+							var equipment = index[0];
+							var mapping   = index[1];
+							_showEquipmentActions( position, equipment, mapping );
 						}
 						e.stopPropagation();
 					} )
 					.on( "click", "." + _prefix + "-show-association", function() {
-						_showDeviceAssociation( _selectedProductId, _indexFeatures[ _selectedProductId + ";" + _selectedFeatureName ] );
+						var $actions = $( this ).parents( "#" + _prefix + "-equipments-actions" );
+						_showEquipmentAssociation( $actions.data( "equipment" ), $actions.data( "mapping" ) );
 					} )
 					.on( "click", "." + _prefix + "-show-params", function() {
-						_showDeviceParams( _selectedProductId, _indexFeatures[ _selectedProductId + ";" + _selectedFeatureName ] );
+						var $actions = $( this ).parents( "#" + _prefix + "-equipments-actions" );
+						_showEquipmentParams( $actions.data( "equipment" ), $actions.data( "mapping" ) );
 					} )
 					.on( "click", "." + _prefix + "-cancel", function() {
-						_hideDeviceAssociation();
-						_hideDeviceParams();
-						_resumeDevicesRefresh();
+						_hideEquipmentAssociation();
+						_hideEquipmentParams();
+						_resumeEquipmentsRefresh();
 					} )
 					// Association event
-					.on( "click", "." + _prefix + "-associate", _setDeviceAssociation )
+					.on( "click", "." + _prefix + "-associate", _setEquipmentAssociation )
 					// Parameters event
-					.on( "click", "." + _prefix + "-set", _setDeviceParams )
+					.on( "click", "." + _prefix + "-set", _setEquipmentParams )
 					// Teach (receiver) event
 					.on( "click", "." + _prefix + "-teach", function() {
+						var $actions = $( this ).parents( "#" + _prefix + "-equipments-actions" );
+						var equipment = $actions.data( "equipment" );
 						api.ui.showMessagePopup( Utils.getLangString( _prefix + "_confirmation_teach_in_receiver" ), 4, 0, {
 							onSuccess: function() {
-								_performActionTeachIn( _selectedProductId, "ON", "" );
+								_performActionTeachIn( equipment.protocol + ";" + equipment.id, "ON", "" );
 								return true;
 							}
 						});
 					} )
 					// Clear (receiver) event
 					.on( "click", "." + _prefix + "-clear", function() {
+						var $actions = $( this ).parents( "#" + _prefix + "-equipments-actions" );
+						var equipment = $actions.data( "equipment" );
 						api.ui.showMessagePopup( Utils.getLangString( _prefix + "_confirmation_clearing_receiver" ), 4, 0, {
 							onSuccess: function() {
-								_performActionClear( _selectedProductId );
+								_performActionClear( equipment.protocol + ";" + equipment.id );
 								return true;
 							}
 						});
 					} );
 
-				// Show devices infos
-				_drawDevicesList();
+				// Show equipments infos
+				_drawEquipmentsList();
 			});
 		} catch (err) {
-			Utils.logError( "Error in " + _pluginName + ".showDevices(): " + err );
+			Utils.logError( "Error in " + _pluginName + ".showEquipments(): " + err );
 		}
 	}
 
 	// *************************************************************************************************
-	// Add external device
+	// Add equipment
 	// *************************************************************************************************
 
 	/**
@@ -918,16 +1072,16 @@ var ZiBlueGateway = ( function( api, $ ) {
 	}
 
 	/**
-	 * Draw and manage ZiBlue add device
+	 * Draw and manage add equipment
 	 */
-	function _drawAddDevice() {
+	function _drawAddEquipment() {
 		$.when( _getProtocolsInfosAsync() )
 			.done( function( protocolsInfos ) {
-				var html = 	'<h3>' + Utils.getLangStringFormat( "ziblue_add_new_device_step", 1 ) + ': ' + Utils.getLangString( "ziblue_add_new_device_settings_title" ) + '</h3>'
-					+		'<div class="zibluegateway-setting ui-widget-content ui-corner-all">'
-					+			'<span>' + Utils.getLangString( "ziblue_protocol" ) + '</span>'
-					+			'<select id="zibluegateway-setting-protocol" class="zibluegateway-setting-value" data-variable="protocol">'
-					+				'<option value="">-- ' + Utils.getLangString( "ziblue_protocol" ) + ' --</option>';
+				var html = 	'<h3>' + Utils.getLangStringFormat( _prefix + "_add_new_equipment_step", 1 ) + ': ' + Utils.getLangString( _prefix + "_add_new_equipment_settings_title" ) + '</h3>'
+					+		'<div class="' + _prefix + '-setting ui-widget-content ui-corner-all">'
+					+			'<span>' + Utils.getLangString( _prefix + "_protocol" ) + '</span>'
+					+			'<select id="' + _prefix + '-setting-protocol" class="' + _prefix + '-setting-value" data-variable="protocol">'
+					+				'<option value="">-- ' + Utils.getLangString( _prefix + "_protocol" ) + ' --</option>';
 				var protocols = [];
 				$.each( protocolsInfos, function( protocolName, protocolInfos ) {
 					protocols.push( [ protocolName, protocolInfos.name ] );
@@ -945,114 +1099,83 @@ var ZiBlueGateway = ( function( api, $ ) {
 				});
 				html +=			'</select>'
 					+		'</div>'
-					+		'<div class="zibluegateway-setting ui-widget-content ui-corner-all">'
-					+			'<span>' + Utils.getLangString( "ziblue_device_name" ) + '</span>'
-					+			'<input type="text" class="zibluegateway-setting-value" data-variable="deviceName" placeholder="' + Utils.getLangString( "ziblue_enter_name" ) + '">'
+					+		'<div class="' + _prefix + '-setting ui-widget-content ui-corner-all">'
+					+			'<span>' + Utils.getLangString( _prefix + "_equipment_name" ) + '</span>'
+					+			'<input type="text" class="' + _prefix + '-setting-value" data-variable="deviceName" placeholder="' + Utils.getLangString( _prefix + "_enter_name" ) + '">'
 					+		'</div>'
-					+		'<div class="zibluegateway-setting ui-widget-content ui-corner-all">'
+					+		'<div class="' + _prefix + '-setting ui-widget-content ui-corner-all">'
 					+			'<span>Id</span>'
-					+			'<input type="text" id="zibluegateway-setting-device-id" class="zibluegateway-setting-value" data-variable="deviceId" placeholder="' + Utils.getLangString( "ziblue_enter_id" ) + '">'
+					+			'<input type="text" id="' + _prefix + '-setting-equipment-id" class="' + _prefix + '-setting-value" data-variable="equipmentId" placeholder="' + Utils.getLangString( _prefix + "_enter_id" ) + '">'
 					+			'&nbsp;'
-					+			'<select id="zibluegateway-setting-device-group">'
+					+			'<select id="' + _prefix + '-setting-equipment-group">'
 					+				'<option value=""></option>'
 					+			'</select>'
-					+			'<select id="zibluegateway-setting-device-unit">'
+					+			'<select id="' + _prefix + '-setting-equipment-unit">'
 					+				'<option value=""></option>'
 					+			'</select>'
 					+		'</div>'
-					+		'<div id="zibluegateway-protocol-settings"></div>'
-					+		'<div id="zibluegateway-protocol-validation"></div>';
-				$( "#zibluegateway-add-device" ).html( html );
+					+		'<div id="' + _prefix + '-protocol-settings"></div>'
+					+		'<div id="' + _prefix + '-protocol-validation"></div>';
+				$( "#" + _prefix + "-add-equipment" ).html( html );
 
 				for ( var i = 65; i < 81; i++) { 
-					$( "#zibluegateway-setting-device-group" ).append( $( "<option>", {
+					$( "#" + _prefix + "-setting-equipment-group" ).append( $( "<option>", {
 						value: String.fromCharCode( i ),
 						text : String.fromCharCode( i )
 					}));
 				}
 				for ( var i = 1; i < 17; i++) { 
-					$( "#zibluegateway-setting-device-unit" ).append( $( "<option>", {
+					$( "#" + _prefix + "-setting-equipment-unit" ).append( $( "<option>", {
 						value: i,
 						text : i
 					}));
 				}
 
-				$( "#zibluegateway-setting-protocol" ).change( function() {
+				$( "#" +_prefix + "-setting-protocol" ).change( function() {
 					var protocolName = $(this).val();
 					var protocolInfos = protocolsInfos[ protocolName ];
 					if ( typeof protocolInfos != "undefined") {
-						_drawProtocolSettings( protocolInfos.deviceTypes || [], protocolInfos.settings || {} );
+						_drawProtocolSettings( protocolInfos.deviceTypes || [], protocolInfos.deviceSettings || [], protocolInfos.protocolSettings || {} );
 					}
 					_drawProtocolValidation( protocolName );
 				});
-				$( "#zibluegateway-setting-device-id" ).change( function() {
+				$( "#" + _prefix + "-setting-equipment-id" ).change( function() {
 					var id = parseInt( $( this ).val(), 10 );
-					$( "#zibluegateway-setting-device-group" ).val( String.fromCharCode( Math.floor( id / 16) + 65 ) );
-					$( "#zibluegateway-setting-device-unit" ).val( (id % 16 + 1).toString() );
+					$( "#" + _prefix + "-setting-equipment-group" ).val( String.fromCharCode( Math.floor( id / 16) + 65 ) );
+					$( "#" + _prefix + "-setting-equipment-unit" ).val( (id % 16 + 1).toString() );
 				});
-				$( "#zibluegateway-setting-device-group" ).change( function() {
+				$( "#" + _prefix + "-setting-equipment-group" ).change( function() {
 					var group = $( this ).val().charCodeAt( 0 ) - 65;
-					var unit = parseInt( $( "#zibluegateway-setting-device-unit" ).val(), 10 );
+					var unit = parseInt( $( "#" + _prefix + "-setting-equipment-unit" ).val(), 10 );
 					if ( ( group >= 0 ) && unit ) {
-						$( "#zibluegateway-setting-device-id" ).val( group * 16  + ( unit - 1 ) );
+						$( "#" + _prefix + "-setting-equipment-id" ).val( group * 16  + ( unit - 1 ) );
 					}
 				});
-				$( "#zibluegateway-setting-device-unit" ).change( function() {
-					var group = $( "#zibluegateway-setting-device-group" ).val().charCodeAt( 0 ) - 65;
+				$( "#" + _prefix + "-setting-equipment-unit" ).change( function() {
+					var group = $( "#" + _prefix + "-setting-equipment-group" ).val().charCodeAt( 0 ) - 65;
 					var unit = parseInt( $( this ).val(), 10 );
 					if ( ( group >= 0 ) && unit ) {
-						$( "#zibluegateway-setting-device-id" ).val( group * 16  + ( unit - 1 ) );
+						$( "#" + _prefix + "-setting-equipment-id" ).val( group * 16  + ( unit - 1 ) );
 					}
 				});
 			} );
-	}
-
-	function _getSettingHtml( setting ) {
-		var className = "zibluegateway-setting-value" + ( setting.className ? " " + setting.className : "" );
-		var html = '<div class="zibluegateway-setting ui-widget-content ui-corner-all">'
-			+			'<span>' + setting.name + '</span>';
-		if ( setting.type == "checkbox" ) {
-			html += '<input type="checkbox"'
-				+		( ( setting.value === true ) ? ' checked="checked"' : '' )
-				+		( ( setting.isReadOnly === true ) ? ' disabled="disabled"' : '' )
-				+		' class="' + className + '" data-setting="' + setting.variable  + '">';
-		} else if ( setting.type == "string" ) {
-			var value = ( setting.value ? setting.value : ( setting.defaultValue ? setting.defaultValue : '' ) );
-			html +=	'<input type="text" value="' + value + '" class="' + className + '" data-setting="' + setting.variable  + '">';
-		} else if ( setting.type == "select" ) {
-			html +=	'<select class="' + className + '" data-setting="' + setting.variable + '">';
-			$.each( setting.values, function( i, value ) {
-				var isSelected = false;
-				if ( typeof setting.value === "string" ) {
-					if ( value === setting.value ) {
-						isSelected = true;
-					}
-				} else if ( i === 0 ) {
-					isSelected = true;
-				}
-				html +=	'<option value="' + value + '"' + ( isSelected ? ' selected' : '' ) + '>' + value + '</option>';
-			} );
-			html +=	'</select>';
-		}
-		html +=	'</div>';
-		return html;
 	}
 
 	/**
 	 * Draw and manage the protocol settings
 	 */
-	function _drawProtocolSettings( deviceTypes, settings ) {
+	function _drawProtocolSettings( deviceTypes, deviceSettings, protocolSettings ) {
 		var html = '';
 
-		// Device type
+		// Linked device type
 		var deviceTypeParams = {};
 		if ( ( deviceTypes == undefined ) || ( deviceTypes.length === 0 ) ) {
 			deviceTypes = [ "BINARY_LIGHT" ];
 		}
-		html +=	'<div class="zibluegateway-setting ui-widget-content ui-corner-all">'
-			+		'<span>' + Utils.getLangString( "ziblue_device_type" ) + '</span>'
-			+		'<select id="zibluegateway-setting-device-type" class="zibluegateway-setting-value" data-variable="deviceType">'
-			+			'<option value="">-- ' + Utils.getLangString( "ziblue_select_device_type" ) + ' --</option>';
+		html +=	'<div class="' + _prefix + '-setting ui-widget-content ui-corner-all">'
+			+		'<span>' + Utils.getLangString( _prefix + "_device_type" ) + '</span>'
+			+		'<select id="' + _prefix + '-setting-device-type" class="' + _prefix + '-setting-value" data-variable="deviceType">'
+			+			'<option value="">-- ' + Utils.getLangString( _prefix + "_select_device_type" ) + ' --</option>';
 		$.each( deviceTypes, function( i, encodedType ) {
 			encodedType = encodedType.split( ';' );
 			var deviceType = encodedType[0];
@@ -1066,19 +1189,20 @@ var ZiBlueGateway = ( function( api, $ ) {
 			html +=	'<option value="' + deviceType + '"' + ( ( i === 0 ) && ( deviceTypes.length === 1 ) ? ' selected' : '' ) + '>' + deviceType + '</option>';
 		} );
 		html +=	'</select>'
+			+	'<div style="display:none" class="' + _prefix + '-setting-value" data-settings="' + deviceSettings.join(",") + '"></div>'
 			+ '</div>';
 
-		// Settings
-		$.each( settings, function( i, setting ) {
+		// Protocol settings
+		$.each( protocolSettings, function( i, setting ) {
 			html += _getSettingHtml( setting );
 		} );
 
-		$("#zibluegateway-protocol-settings").html( html );
+		$("#" + _prefix + "-protocol-settings").html( html );
 
-		$( '#zibluegateway-setting-device-type' ).change( function() {
+		$( '#' + _prefix + '-setting-device-type' ).change( function() {
 			var deviceType = $(this).val();
 			$.each( deviceTypeParams[ deviceType ], function( key, value ) {
-				$( '#zibluegateway-add-device-panel .zibluegateway-setting-value[data-setting="' + key + '"]' ).val( value );
+				$( '#' + _prefix + '-add-equipment-panel .' + _prefix + '-setting-value[data-setting="' + key + '"]' ).val( value );
 			});
 		});
 	}
@@ -1090,30 +1214,30 @@ var ZiBlueGateway = ( function( api, $ ) {
 		var html = '';
 		if ( protocolName != "" ) {
 			var step = 2;
-			html = '<h3>' + Utils.getLangStringFormat( "ziblue_add_new_device_step", step ) + ': ' + Utils.getLangString( "ziblue_add_new_device_teach_title" ) + '</h3>'
+			html = '<h3>' + Utils.getLangStringFormat( _prefix + "_add_new_equipment_step", step ) + ': ' + Utils.getLangString( _prefix + "_add_new_equipment_teach_title" ) + '</h3>'
 				+		'<div>'
-				+		( protocolName === "PARROT" ? Utils.getLangString( "ziblue_add_new_device_teach_parrot_explanation" ) : Utils.getLangString( "ziblue_add_new_device_teach_explanation" ) )
+				+		( protocolName === "PARROT" ? Utils.getLangString( _prefix + "_add_new_equipment_teach_parrot_explanation" ) : Utils.getLangString( _prefix + "_add_new_equipment_teach_explanation" ) )
 				+		'</div>'
 				+		'<div>'
-				+			'<button type="button" class="zibluegateway-teach">' + Utils.getLangString( "ziblue_teach" ) + '</button>'
+				+			'<button type="button" class="' + _prefix + '-teach">' + Utils.getLangString( _prefix + "_teach" ) + '</button>'
 				+		'</div>';
 			if ( protocolName !== "PARROT" ) {
 				step = 3;
-				html +=	'<h3>' + Utils.getLangStringFormat( "ziblue_add_new_device_step", step ) + ': ' + Utils.getLangString( "ziblue_add_new_device_test_title" ) + '</h3>'
-					+	'<div>' + Utils.getLangString( "ziblue_add_new_device_test_explanation" ) + '</div>'
+				html +=	'<h3>' + Utils.getLangStringFormat( _prefix + "_add_new_equipment_step", step ) + ': ' + Utils.getLangString( _prefix + "_add_new_equipment_test_title" ) + '</h3>'
+					+	'<div>' + Utils.getLangString( _prefix + "_add_new_equipment_test_explanation" ) + '</div>'
 					+	'<div>'
-					+		'<button type="button" class="zibluegateway-test-on">ON</button>'
-					+		'<button type="button" class="zibluegateway-test-off">OFF</button>'
+					+		'<button type="button" class="' + _prefix + '-test-on">ON</button>'
+					+		'<button type="button" class="' + _prefix + '-test-off">OFF</button>'
 					+	'</div>';
 			}
 			step++;
-			html +=		'<h3>' + Utils.getLangStringFormat( "ziblue_add_new_device_step", step ) + ': ' + Utils.getLangString( "ziblue_add_new_device_validate_title" ) + '</h3>'
-				+		'<div>' + Utils.getLangString( "ziblue_add_new_device_validate_explanation" ) + '</div>'
+			html +=		'<h3>' + Utils.getLangStringFormat( _prefix + "_add_new_equipment_step", step ) + ': ' + Utils.getLangString( _prefix + "_add_new_equipment_validate_title" ) + '</h3>'
+				+		'<div>' + Utils.getLangString( _prefix + "_add_new_equipment_validate_explanation" ) + '</div>'
 				+		'<div>'
-				+			'<button type="button" class="zibluegateway-create">' + Utils.getLangString( "ziblue_create" ) + '</button>'
+				+			'<button type="button" class="' + _prefix + '-create">' + Utils.getLangString( _prefix + "_create" ) + '</button>'
 				+		'</div>';
 		}
-		$("#zibluegateway-protocol-validation").html( html );
+		$("#" + _prefix + "-protocol-validation").html( html );
 	}
 
 	/**
@@ -1121,7 +1245,7 @@ var ZiBlueGateway = ( function( api, $ ) {
 	 */
 	function _getSettings() {
 		var settings = { settings: [] };
-		$( '#zibluegateway-add-device-panel .zibluegateway-setting-value' ).each( function() {
+		$( '#' + _prefix + '-add-equipment-panel .' + _prefix + '-setting-value' ).each( function() {
 			var variableName = $( this ).data( 'variable' );
 			if ( variableName ) {
 				settings[ variableName ] = $( this ).val();
@@ -1130,28 +1254,32 @@ var ZiBlueGateway = ( function( api, $ ) {
 			if ( settingName ) {
 				settings.settings.push( settingName + "=" + $( this ).val() );
 			}
+			var settingsName = $( this ).data( 'settings' );
+			if ( settingsName ) {
+				$.extend( settings.settings, settingsName.split( "," ) );
+			}
 		});
 		settings.settings = settings.settings.join( "," );
 		if ( !settings.protocol ) {
 			api.ui.showMessagePopup( "You have to choose a protocol.", 2, 0 );
 			return false;
-		} else if ( !settings.deviceId ) {
-			api.ui.showMessagePopup( "You have to set the device id.", 2, 0 );
+		} else if ( !settings.equipmentId ) {
+			api.ui.showMessagePopup( "You have to set the equipment id.", 2, 0 );
 			return false;
 		} else if ( !settings.deviceName ) {
-			api.ui.showMessagePopup( "You have to set the device name.", 2, 0 );
+			api.ui.showMessagePopup( "You have to set the linked device name.", 2, 0 );
 			return false;
 		} else if ( !settings.deviceType ) {
-			api.ui.showMessagePopup( "You have to choose the device type.", 2, 0 );
+			api.ui.showMessagePopup( "You have to choose the linked device type.", 2, 0 );
 			return false;
 		}
 		return settings;
 	}
 
 	/**
-	 * Show add device
+	 * Show add equipment
 	 */
-	function _showAddDevice( deviceId ) {
+	function _showAddEquipment( deviceId ) {
 		if ( deviceId ) {
 			_deviceId = deviceId;
 		}
@@ -1159,47 +1287,47 @@ var ZiBlueGateway = ( function( api, $ ) {
 			$.when( _loadResourcesAsync(), _loadLocalizationAsync() ).then( function() {
 				var hasTeachingBeenDone = false;
 				api.setCpanelContent(
-						'<div id="zibluegateway-add-device-panel" class="zibluegateway-panel">'
-					+		'<h1>' + Utils.getLangString( "ziblue_add_new_device" ) + '</h1>'
+						'<div id="' + _prefix + '-add-equipment-panel" class="' + _prefix + '-panel">'
+					+		'<h1>' + Utils.getLangString( _prefix + "_add_new_equipment" ) + '</h1>'
 					+		'<div class="scenes_section_delimiter"></div>'
-					+		'<div id="zibluegateway-add-device">'
-					+			Utils.getLangString( "ziblue_loading" )
+					+		'<div id="' + _prefix + '-add-equipment">'
+					+			Utils.getLangString( _prefix + "_loading" )
 					+		'</div>'
 					+	'</div>'
 				);
 
-				$( "#zibluegateway-add-device-panel" )
-					.on( "click", ".zibluegateway-teach", function() {
+				$( "#" + _prefix + "-add-equipment-panel" )
+					.on( "click", "." + _prefix + "-teach", function() {
 						var settings = _getSettings();
 						if ( settings ) {
 							var $that = $( this ).addClass( "highlighted" );
-							$.when( _performActionTeachIn( settings.protocol + ";" + settings.deviceId, settings.action, settings.message ) )
+							$.when( _performActionTeachIn( settings.protocol + ";" + settings.equipmentId, settings.action, settings.message ) )
 								.done( function() { hasTeachingBeenDone = true; } )
 								.then( function() { $that.removeClass( "highlighted" ); } );
 						}
 					})
-					.on( "click", ".zibluegateway-test-on", function() {
+					.on( "click", "." + _prefix + "-test-on", function() {
 						var settings = _getSettings();
 						if ( settings ) {
 							var $that = $( this ).addClass( "highlighted" );
-							$.when( _performActionSetTarget( settings.protocol + ";" + settings.deviceId + ( settings.qualifier ? ";" + settings.qualifier : "" ), "1" ) )
+							$.when( _performActionSetTarget( settings.protocol + ";" + settings.equipmentId + ( settings.qualifier ? ";" + settings.qualifier : "" ), "1" ) )
 								.then( function() { $that.removeClass( "highlighted" ); } );
 						}
 					})
-					.on( "click", ".zibluegateway-test-off", function() {
+					.on( "click", "." + _prefix + "-test-off", function() {
 						var settings = _getSettings();
 						if ( settings ) {
 							var $that = $( this ).addClass( "highlighted" );
-							$.when( _performActionSetTarget( settings.protocol + ";" + settings.deviceId + ( settings.qualifier ? ";" + settings.qualifier : "" ), "0" ) )
+							$.when( _performActionSetTarget( settings.protocol + ";" + settings.equipmentId + ( settings.qualifier ? ";" + settings.qualifier : "" ), "0" ) )
 								.then( function() { $that.removeClass( "highlighted" ); } );
 						}
 					})
-					.on( "click", ".zibluegateway-create", function() {
+					.on( "click", "." + _prefix + "-create", function() {
 						var $that = $( this );
 						var d = $.Deferred();
 						var settings = _getSettings();
 						if ( !hasTeachingBeenDone ) {
-							api.ui.showMessagePopup( Utils.getLangString( "ziblue_warning_teach_in_not_done" ), 4, 0, {
+							api.ui.showMessagePopup( Utils.getLangString( _prefix + "_warning_teach_in_not_done" ), 4, 0, {
 								onSuccess: function() {
 									d.resolve();
 								},
@@ -1212,129 +1340,147 @@ var ZiBlueGateway = ( function( api, $ ) {
 						}
 						$.when( d, settings )
 							.done( function() {
-								// create device
+								// Create linked device
 								$that.addClass( "highlighted" );
-								var encodedProductId = settings.protocol + ";" + settings.deviceId + ";" + settings.deviceType + ";" + settings.settings + ";" + settings.deviceName;
-								$.when( _performActionCreateDevices( [ encodedProductId ] ) )
+								$.when( _performActionCreateDevices( [ settings ] ) )
 									.done( function() {
 										$that.removeClass( "highlighted" );
-										_showReload( Utils.getLangString( "ziblue_device_has_been_created" ), function() {
-											_showDevices();
+										_showReload( Utils.getLangString( _prefix + "_device_has_been_created" ), function() {
+											_showEquipments();
 										});
 									});
 							});
 					});
 
-				_drawAddDevice();
+				_drawAddEquipment();
 			});
 		} catch (err) {
-			Utils.logError('Error in ZiBlueGateway.showAddDevice(): ' + err);
+			Utils.logError('Error in ' + _pluginName + '.showAddEquipment(): ' + err);
 		}
 	}
 
 	// *************************************************************************************************
-	// Discovered external devices
+	// Discovered equipments
 	// *************************************************************************************************
 
-	function _stopDiscoveredDevicesRefresh() {
-		if ( _discoveredDevicesTimeout ) {
-			window.clearTimeout( _discoveredDevicesTimeout );
+	function _stopDiscoveredEquipmentsRefresh() {
+		if ( _discoveredEquipmentsTimeout ) {
+			window.clearTimeout( _discoveredEquipmentsTimeout );
 		}
-		_discoveredDevicesTimeout = null;
+		_discoveredEquipmentsTimeout = null;
 	}
-	function _resumeDiscoveredDevicesRefresh() {
-		if ( _discoveredDevicesTimeout == null ) {
-			var timeout = 3000 - ( Date.now() - _discoveredDevicesLastRefresh );
+	function _resumeDiscoveredEquipmentsRefresh() {
+		if ( _discoveredEquipmentsTimeout == null ) {
+			var timeout = 3000 - ( Date.now() - _discoveredEquipmentsLastRefresh );
 			if ( timeout < 0 ) {
 				timeout = 0;
 			}
-			_discoveredDevicesTimeout = window.setTimeout( _drawDiscoveredDevicesList, timeout );
+			_discoveredEquipmentsTimeout = window.setTimeout( _drawDiscoveredEquipmentsList, timeout );
 		}
 	}
 
 	/**
-	 * Draw and manage discovered ziblue device list
+	 * Draw and manage discovered equipments list
 	 */
-	function _drawDiscoveredDevicesList() {
-		_stopDiscoveredDevicesRefresh();
-		if ( $( "#" + _prefix + "-discovered-devices" ).length === 0 ) {
+	function _drawDiscoveredEquipmentsList() {
+		_stopDiscoveredEquipmentsRefresh();
+		if ( $( "#" + _prefix + "-discovered-equipments" ).length === 0 ) {
+			// The panel is no more here
 			return;
 		}
-		$.when( _getDevicesInfosAsync() )
-			.done( function( devicesInfos ) {
-				if ( devicesInfos.discoveredDevices.length > 0 ) {
-					// Sort the discovered ziblue devices by last update
-					devicesInfos.discoveredDevices.sort( function( d1, d2 ) {
-						return d2.lastUpdate - d1.lastUpdate;
+		if ( !$( "#" + _prefix + "-discovered-equipments" ).is( ":visible" ) ) {
+			// The panel is hidden
+			_discoveredEquipmentsLastRefresh = Date.now();
+			_resumeDiscoveredEquipmentsRefresh();
+			return;
+		}
+		$.when( _getEquipmentsInfosAsync() )
+			.done( function( infos ) {
+				if ( infos.discoveredEquipments.length > 0 ) {
+					// Sort the discovered equipments by last update
+					infos.discoveredEquipments.sort( function( e1, e2 ) {
+						return e2.lastUpdate - e1.lastUpdate;
 					});
 					var html =	'<table><tr>'
 						+			'<th>' + Utils.getLangString( _prefix + "_protocol" ) + '</th>'
-						+			'<th>' + Utils.getLangString( _prefix + "_id" ) + '</th>'
+						+			'<th>' + Utils.getLangString( _prefix + "_id" ) + '</th>' // TODO : Frequency ?
 						+			'<th>' + Utils.getLangString( _prefix + "_signal_quality" ) + '</th>'
 						+			'<th>' + Utils.getLangString( _prefix + "_last_update" ) + '</th>'
 						+			'<th>' + Utils.getLangString( _prefix + "_feature" ) + '</th>'
-						+			'<th></th>'
 						+		'</tr>';
-					$.each( devicesInfos.discoveredDevices, function( i, discoveredDevice ) {
-						var productId = discoveredDevice.protocol + ';' + discoveredDevice.protocolDeviceId;
-						html += '<tr class="' + _prefix + '-discovered-device" data-product-id="' + productId + '">'
-							+		'<td>' + discoveredDevice.protocol + '</td>'
-							+		'<td>' + discoveredDevice.protocolDeviceId + '</td>'
-							+		'<td>' + ( discoveredDevice.rfQuality >= 0 ? discoveredDevice.rfQuality : '' ) + '</td>'
-							+		'<td>' + _convertTimestampToLocaleString( discoveredDevice.lastUpdate ) + '</td>'
+					$.each( infos.discoveredEquipments, function( i, discoveredEquipment ) {
+						html += '<tr class="' + _prefix + '-discovered-equipment">'
+							+		'<td class="' + _prefix + '-protocol-name">' + discoveredEquipment.protocol + '</td>'
+							+		'<td class="' + _prefix + '-protocol-id">' + discoveredEquipment.id + '</td>'
+							+		'<td>' + ( discoveredEquipment.quality >= 0 ? discoveredEquipment.quality : '' ) + '</td>'
+							+		'<td>' + _convertTimestampToLocaleString( discoveredEquipment.lastUpdate ) + '</td>'
 							+		'<td>'
-							+			'<div class="font-weight-bold">' + discoveredDevice.name + '</div>'
-							+			'<table class="' + _prefix + '-feature-group">';
-						$.each( discoveredDevice.featureGroups, function( j, group ) {
-							if ( group.isUsed === false ) {
+							+			'<div class="font-weight-bold">' + discoveredEquipment.name + '</div>';
+						if ( discoveredEquipment.comment ) {
+							html +=		'<div>' + discoveredEquipment.comment + '</div>';
+						}
+						$.each( discoveredEquipment.modelings, function( j, modeling ) {
+							if ( modeling.isUsed === false ) {
 								return;
 							}
-							html +=			'<tr>'
-								+				'<td>';
-							$.each( group.features, function( featureName, feature ) {
-								if ( feature.isUsed === false ) {
+							html +=		'<div class="' + _prefix + '-equipment-modeling" data-protocol="' + discoveredEquipment.protocol + '" data-equipment-id="' + discoveredEquipment.id + '">'
+								+			'<div class="' + _prefix + '-modeling-select">'
+								+				'<input type="checkbox">'
+								+			'</div>'
+								+			'<div class="' + _prefix + '-equipment-mappings">';
+							$.each( modeling.mappings, function( j, mapping ) {
+								if ( mapping.isUsed === false ) {
 									return;
 								}
-								html +=				'<div class="ziblue-feature-name">' + featureName + '</div>'
-									+				( feature.comment ? '<div>' + feature.comment + '</div>' : '' )
-									+				( feature.state ? '<div class="ziblue-feature-state">' + feature.state + '</div>' : '' );
-							});
-							html +=				'</td><td class="ziblue-device-type" width="40%">';
-							if ( group.deviceTypes ) {
-								if ( group.deviceTypes.length > 1 ) {
-									html +=				'<select>';
-									$.each( group.deviceTypes, function( k, deviceType ) {
-										html +=				'<option value="' + deviceType + '">' + deviceType + '</option>';
-									} );
-									html +=				'</select>';
-								} else {
-									html +=	group.deviceTypes[0];
+								var featureNames = [];
+								html +=			'<div class="' + _prefix + '-equipment-mapping">'
+									+				'<div class="' + _prefix + '-features">';
+								$.each( mapping.features, function( featureName, feature ) {
+									if ( feature.isUsed === false ) {
+										return;
+									}
+									featureNames.push( featureName );
+									html +=				'<div class="' + _prefix + '-feature">'
+										+					'<span class="' + _prefix + '-feature-name">' + featureName + '</span>'
+										+					( feature.state ? '<span class="' + _prefix + '-feature-state">' + feature.state + '</span>' : '' )
+										+				'</div>';
+								});
+								html +=				'</div>'
+									+				'<div class="' + _prefix + '-device-type" data-feature-names="' + featureNames.join(",") + '" data-settings="' + ( mapping.settings ? mapping.settings.join(",") : "" ) + '">';
+								if ( mapping.deviceTypes ) {
+									if ( mapping.deviceTypes.length > 1 ) {
+										html +=			'<select>';
+										$.each( mapping.deviceTypes, function( k, deviceType ) {
+											html +=			'<option value="' + deviceType + '">' + deviceType + '</option>';
+										} );
+										html +=			'</select>';
+									} else {
+										html +=	mapping.deviceTypes[0];
+									}
 								}
-							}
-							html +=				'</td>'
-								+			'</tr>';
-						} );
-						html +=			'</table>'
-							+		'</td>'
-							+		'<td>'
-							+			'<input type="checkbox">'
-							+		'</td>'
+								html +=				'</div>'
+									+			'</div>';
+							});
+							html +=			'</div>'
+								+		'</div>';
+						});
+						html +=		'</td>'
 							+	'</tr>';
 					});
 					html += '</table>';
-					$("#" + _prefix + "-discovered-devices").html( html );
+					$("#" + _prefix + "-discovered-equipments").html( html );
 				} else {
-					$("#" + _prefix + "-discovered-devices").html( Utils.getLangString( "zigate_no_discovered_device" ) );
+					$("#" + _prefix + "-discovered-equipments").html( Utils.getLangString( _prefix + "_no_discovered_equipment" ) );
 				}
-				_discoveredDevicesLastRefresh = Date.now();
-				_resumeDiscoveredDevicesRefresh();
+				_discoveredEquipmentsLastRefresh = Date.now();
+				_resumeDiscoveredEquipmentsRefresh();
 			} );
 	}
 
 	/**
-	 * Show ziblue discovered devices
+	 * Show discovered equipments
 	 */
-	function _showDiscoveredDevices( deviceId ) {
+	function _showDiscoveredEquipments( deviceId ) {
 		if ( deviceId ) {
 			_deviceId = deviceId;
 		}
@@ -1342,7 +1488,7 @@ var ZiBlueGateway = ( function( api, $ ) {
 			$.when( _loadResourcesAsync(), _loadLocalizationAsync() ).then( function() {
 				api.setCpanelContent(
 						'<div id="' + _prefix + '-discovered-panel" class="' + _prefix + '-panel">'
-					+		'<h1>' + Utils.getLangString( _prefix + "_discovered_devices" ) + '</h1>'
+					+		'<h1>' + Utils.getLangString( _prefix + "_discovered_equipments" ) + '</h1>'
 					+		'<div class="scenes_section_delimiter"></div>'
 					+		'<div class="' + _prefix + '-toolbar">'
 					+			'<button type="button" class="' + _prefix + '-help"><i class="fa fa-question fa-lg text-info" aria-hidden="true"></i>&nbsp;' + Utils.getLangString( _prefix + "_help" ) + '</button>'
@@ -1351,32 +1497,33 @@ var ZiBlueGateway = ( function( api, $ ) {
 					+			'<button type="button" class="' + _prefix + '-learn"><i class="fa fa-plus fa-lg" aria-hidden="true"></i>&nbsp;' + Utils.getLangString( _prefix + "_learn" ) + '</button>'
 					+		'</div>'
 					+		'<div class="' + _prefix + '-explanation ' + _prefix + '-hidden">'
-					+			Utils.getLangString( _prefix + "_explanation_discovered_devices" )
+					+			Utils.getLangString( _prefix + "_explanation_discovered_equipments" )
 					+		'</div>'
-					+		'<div id="' + _prefix + '-discovered-devices" class="' + _prefix + '-devices">'
+					+		'<div id="' + _prefix + '-discovered-equipments" class="' + _prefix + '-equipments">'
 					+			Utils.getLangString( _prefix + "_loading" )
 					+		'</div>'
 					+	'</div>'
 				);
 
-				function _getSelectedProductIds() {
-					var items = [];
-					$( "#" + _prefix + "-discovered-devices input:checked:visible" ).each( function() {
-						var $device = $( this ).parents( "." + _prefix + "-discovered-device" );
-						var productId = $device.data( "product-id" );
-						var deviceTypes = [];
-						$device.find( "." + _prefix + "-device-type" )
+				function _getSelectedMappings() {
+					var mappings = [];
+					$( "#" + _prefix + "-discovered-equipments input:checked:visible" ).each( function() {
+						var $modeling = $( this ).parents( "." + _prefix + "-equipment-modeling" );
+						var protocol = $modeling.data( "protocol" );
+						var equipmentId = $modeling.data( "equipment-id" );
+						$modeling.find( "." + _prefix + "-device-type" )
 							.each( function( index ) {
 								var $select = $( this ).find( "select" );
-								if ( $select.length > 0 ) {
-									deviceTypes.push( $select.val() );
-								} else {
-									deviceTypes.push( $( this ).text() );
-								}
+								mappings.push({
+									protocol: protocol,
+									equipmentId: equipmentId,
+									deviceType: ( ( $select.length > 0 ) ? $select.val() : $( this ).text() ),
+									featureNames: $( this ).data( "feature-names" ).split( "," ),
+									settings: $( this ).data( "settings" ).split( "," )
+								});
 							});
-						items.push( productId + ';' + deviceTypes.join( ',' ) + ';' );
 					});
-					return items;
+					return mappings;
 				}
 
 				// Manage UI events
@@ -1385,16 +1532,16 @@ var ZiBlueGateway = ( function( api, $ ) {
 						$( "." + _prefix + "-explanation" ).toggleClass( _prefix + "-hidden" );
 					} )
 					.on( "click", "." + _prefix + "-learn", function( e ) {
-						var productIds = _getSelectedProductIds();
-						if ( productIds.length === 0 ) {
-							api.ui.showMessagePopup( Utils.getLangString( _prefix + "_select_device" ), 1 );
+						var mappings = _getSelectedMappings();
+						if ( mappings.length === 0 ) {
+							api.ui.showMessagePopup( Utils.getLangString( _prefix + "_select_equipment" ), 1 );
 						} else {
-							api.ui.showMessagePopup( Utils.getLangString( _prefix + "_confirmation_learning_devices" ) + " " + productIds.join( "<br/>" ), 4, 0, {
+							api.ui.showMessagePopup( Utils.getLangString( _prefix + "_confirmation_learning_equipments" ) + " <pre>" + JSON.stringify( mappings, undefined, 2 ) + "</pre>", 4, 0, {
 								onSuccess: function() {
-									$.when( _performActionCreateDevices( productIds ) )
+									$.when( _performActionCreateDevices( mappings ) )
 										.done( function() {
 											_showReload( Utils.getLangString( _prefix + "_devices_have_been_created" ), function() {
-												_showDevices();
+												_showEquipments();
 											});
 										});
 									return true;
@@ -1406,32 +1553,32 @@ var ZiBlueGateway = ( function( api, $ ) {
 						alert( "TODO" );
 					})
 					.on( "focus", "select", function( e ) {
-						_stopDiscoveredDevicesRefresh();
+						_stopDiscoveredEquipmentsRefresh();
 					})
 					.on( "blur", "select", function( e ) {
 						if ( $( "#" + _prefix + "-discovered-panel input:checked" ).length === 0 ) {
-							_resumeDiscoveredDevicesRefresh();
+							_resumeDiscoveredEquipmentsRefresh();
 						}
 					})
 					.on( "change", "select", function( e ) {
 						if ( $( "#" + _prefix + "-discovered-panel input:checked" ).length === 0 ) {
-							_resumeDiscoveredDevicesRefresh();
+							_resumeDiscoveredEquipmentsRefresh();
 						}
 					})
 					.on( "change", "input:checkbox", function( e ) {
 						if ( $( "#" + _prefix + "-discovered-panel input:checked" ).length > 0 ) {
-							_stopDiscoveredDevicesRefresh();
+							_stopDiscoveredEquipmentsRefresh();
 						} else {
-							_resumeDiscoveredDevicesRefresh();
+							_resumeDiscoveredEquipmentsRefresh();
 						}
 					})
 					;
 
-				// Show discovered devices infos
-				_drawDiscoveredDevicesList();
+				// Show discovered equipments infos
+				_drawDiscoveredEquipmentsList();
 			});
 		} catch (err) {
-			Utils.logError( "Error in " + _pluginName + ".showDevices(): " + err );
+			Utils.logError( "Error in " + _pluginName + ".showDiscoveredEquipments(): " + err );
 		}
 	}
 
@@ -1443,7 +1590,7 @@ var ZiBlueGateway = ( function( api, $ ) {
 	 * 
 	 */
 	function _performActionRefresh() {
-		Utils.logDebug( "[" + _pluginName + ".performActionRefresh] Refresh the list of external devices" );
+		Utils.logDebug( "[" + _pluginName + ".performActionRefresh] Refresh the list of equipments" );
 		return Utils.performActionOnDevice(
 			_deviceId, PLUGIN_SID, "Refresh", {
 				output_format: "json"
@@ -1452,14 +1599,15 @@ var ZiBlueGateway = ( function( api, $ ) {
 	}
 
 	/**
-	 * 
+	 * Create devices linked to an equipment
 	 */
-	function _performActionCreateDevices( encodedProductIds ) {
-		Utils.logDebug( "[" + _pluginName + ".performActionCreateDevices] Create external product/features '" + encodedProductIds + "'" );
+	function _performActionCreateDevices( mappings ) {
+		var jsonMappings = JSON.stringify( mappings );
+		Utils.logDebug( "[" + _pluginName + ".performActionCreateDevices] Create devices '" + jsonMappings + "'" );
 		return Utils.performActionOnDevice(
 			_deviceId, PLUGIN_SID, "CreateDevices", {
 				output_format: "json",
-				productIds: encodeURIComponent( encodedProductIds.join( "|" ) )
+				mappings: encodeURIComponent( jsonMappings )
 			}
 		);
 	}
@@ -1468,7 +1616,7 @@ var ZiBlueGateway = ( function( api, $ ) {
 	 * 
 	 */
 	function _performActionTeachIn( productId, action, comment ) {
-		Utils.logDebug( "[" + _pluginName + ".performActionTeachIn] Teach in ZiBlue product '" + productId + "', action: " + action + ", comment: " + comment );
+		Utils.logDebug( "[" + _pluginName + ".performActionTeachIn] Teach in equipment '" + productId + "', action: " + action + ", comment: " + comment );
 		return Utils.performActionOnDevice(
 			_deviceId, PLUGIN_SID, "TeachIn", {
 				output_format: "json",
@@ -1480,10 +1628,10 @@ var ZiBlueGateway = ( function( api, $ ) {
 	}
 
 	/**
-	 * Associate external device to Vera devices
+	 * Associate equipment to Vera devices
 	 */
 	function _performActionAssociate( productId, featureName, encodedAssociation ) {
-		Utils.logDebug( "[" + _pluginName + ".performActionAssociate] Associate external product/feature '" + productId + "/" + featureName + "' with " + encodedAssociation );
+		Utils.logDebug( "[" + _pluginName + ".performActionAssociate] Associate equipment product/feature '" + productId + "/" + featureName + "' with " + encodedAssociation );
 		return Utils.performActionOnDevice(
 			_deviceId, PLUGIN_SID, "Associate", {
 				output_format: "json",
@@ -1495,10 +1643,10 @@ var ZiBlueGateway = ( function( api, $ ) {
 	}
 
 	/**
-	 * Test ON/OFF on newly created device (before validating)
+	 * Test ON/OFF on newly created equipment (before validating)
 	 */
 	function _performActionSetTarget( productId, targetValue ) {
-		Utils.logDebug( "[" + _pluginName + "._performActionSetTarget] Set target for ZiBlue product '" + productId + " to " + targetValue );
+		Utils.logDebug( "[" + _pluginName + "._performActionSetTarget] Set target for equipment '" + productId + " to " + targetValue );
 		return Utils.performActionOnDevice(
 			_deviceId, PLUGIN_SID, "SetTarget", {
 				output_format: "json",
@@ -1576,22 +1724,22 @@ var ZiBlueGateway = ( function( api, $ ) {
 						'<div id="' + _prefix + '-errors-panel" class="' + _prefix + '-panel">'
 					+		'<h1>' + Utils.getLangString( _prefix + "_errors" ) + '</h1>'
 					+		'<div class="scenes_section_delimiter"></div>'
-					/*+		'<div class="' + _prefix + '-toolbar">'
+					+		'<div class="' + _prefix + '-toolbar">'
 					+			'<button type="button" class="' + _prefix + '-help"><i class="fa fa-question fa-lg text-info" aria-hidden="true"></i>&nbsp;' + Utils.getLangString( _prefix + "_help" ) + '</button>'
 					+		'</div>'
 					+		'<div class="' + _prefix + '-explanation ' + _prefix + '-hidden">'
 					+			Utils.getLangString( _prefix + "_explanation_errors" )
-					+		'</div>'*/
+					+		'</div>'
 					+		'<div id="' + _prefix + '-errors">'
 					+			Utils.getLangString( _prefix + "_loading" )
 					+		'</div>'
 					+	'</div>'
 				);
 				// Manage UI events
-				/*$( "#" + _prefix + "-errors-panel" )
+				$( "#" + _prefix + "-errors-panel" )
 					.on( "click", "." + _prefix + "-help" , function() {
 						$( "." + _prefix + "-explanation" ).toggleClass( _prefix + "-hidden" );
-					} );*/
+					} );
 				// Display the errors
 				_drawErrorsList();
 			});
@@ -1630,9 +1778,10 @@ var ZiBlueGateway = ( function( api, $ ) {
 
 	myModule = {
 		uuid: _uuid,
-		showAddDevice: _showAddDevice,
-		showDevices: _showDevices,
-		showDiscoveredDevices: _showDiscoveredDevices,
+		showSettings: _showSettings,
+		showAddEquipment: _showAddEquipment,
+		showEquipments: _showEquipments,
+		showDiscoveredEquipments: _showDiscoveredEquipments,
 		showErrors: _showErrors,
 		showDonate: _showDonate,
 

@@ -82,33 +82,43 @@
 		},
 		{
 			"Label": {
-				"lang_tag": "ziblue_tab_new_device",
-				"text": "New device"
+				"lang_tag": "ziblue_tab_settings",
+				"text": "Settings"
 			},
 			"Position": 1,
 			"TabType": "javascript",
 			"ScriptName": "J_ZiBlueGateway1.js",
-			"Function": "ZiBlueGateway.showAddDevice"
+			"Function": "ZiBlueGateway.showSettings"
 		},
 		{
 			"Label": {
-				"lang_tag": "ziblue_tab_managed_devices",
-				"text": "Managed devices"
+				"lang_tag": "ziblue_tab_new_equipment",
+				"text": "New equipment"
 			},
 			"Position": 2,
 			"TabType": "javascript",
 			"ScriptName": "J_ZiBlueGateway1.js",
-			"Function": "ZiBlueGateway.showDevices"
+			"Function": "ZiBlueGateway.showAddEquipment"
 		},
 		{
 			"Label": {
-				"lang_tag": "ziblue_tab_discovered_devices",
-				"text": "Discovered devices"
+				"lang_tag": "ziblue_tab_managed_equipments",
+				"text": "Managed equipments"
 			},
 			"Position": 3,
 			"TabType": "javascript",
 			"ScriptName": "J_ZiBlueGateway1.js",
-			"Function": "ZiBlueGateway.showDiscoveredDevices"
+			"Function": "ZiBlueGateway.showEquipments"
+		},
+		{
+			"Label": {
+				"lang_tag": "ziblue_tab_discovered_equipments",
+				"text": "Discovered equipments"
+			},
+			"Position": 4,
+			"TabType": "javascript",
+			"ScriptName": "J_ZiBlueGateway1.js",
+			"Function": "ZiBlueGateway.showDiscoveredEquipments"
 		},
 		{
 			"Label": {
@@ -195,6 +205,20 @@
 					"defaultValue": "1"
 				}
 			]
+		},
+		{
+			"id": 2,
+			"label": {
+				"lang_tag": "ui7_sensor_tampered",
+				"text": "Whenever _DEVICE_NAME_ is being tampered with"
+			},
+			"serviceId": "urn:micasaverde-com:serviceId:HaDevice1",
+			"serviceStateTable": {
+				"sl_TamperAlarm": {
+					"value": "1",
+					"comparisson": "="
+				}
+			}
 		}
 	],
 	"device_type": "urn:schemas-upnp-org:device:ZiBlueGateway:1"

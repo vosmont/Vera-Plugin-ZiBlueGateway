@@ -10,6 +10,10 @@
 			<dataType>ui4</dataType>
 		</stateVariable>
 		<stateVariable>
+			<name>A_ARG_TYPE_UI1</name>
+			<dataType>ui1</dataType>
+		</stateVariable>
+		<stateVariable>
 			<name>A_ARG_TYPE_UI4</name>
 			<dataType>ui4</dataType>
 		</stateVariable>
@@ -43,7 +47,7 @@
 			<name>CreateDevices</name>
 			<argumentList>
 				<argument>
-					<name>productIds</name>
+					<name>mappings</name>
 					<direction>in</direction>
 					<relatedStateVariable>A_ARG_TYPE_STRING</relatedStateVariable>
 				</argument>
@@ -80,26 +84,6 @@
 			</argumentList>
 		</action>
 		<action>
-			<name>Associate</name>
-			<argumentList>
-				<argument>
-					<name>productId</name>
-					<direction>in</direction>
-					<relatedStateVariable>A_ARG_TYPE_STRING</relatedStateVariable>
-				</argument>
-				<argument>
-					<name>feature</name>
-					<direction>in</direction>
-					<relatedStateVariable>A_ARG_TYPE_STRING</relatedStateVariable>
-				</argument>
-				<argument>
-					<name>association</name>
-					<direction>in</direction>
-					<relatedStateVariable>A_ARG_TYPE_STRING</relatedStateVariable>
-				</argument>
-			</argumentList>
-		</action>
-		<action>
 			<name>SetTarget</name>
 			<argumentList>
 				<argument>
@@ -111,6 +95,16 @@
 					<name>newTargetValue</name>
 					<direction>in</direction>
 					<relatedStateVariable>A_ARG_TYPE_BOOLEAN</relatedStateVariable>
+				</argument>
+			</argumentList>
+		</action>
+		<action>
+			<name>SimulateJamming</name>
+			<argumentList>
+				<argument>
+					<name>delay</name>
+					<direction>in</direction>
+					<relatedStateVariable>A_ARG_TYPE_UI1</relatedStateVariable>
 				</argument>
 			</argumentList>
 		</action>
