@@ -23,7 +23,7 @@ local hasJson, json = pcall( require, "dkjson" )
 
 _NAME = "ZiBlueGateway"
 _DESCRIPTION = "ZiBlue gateway for the Vera"
-_VERSION = "1.1"
+_VERSION = "1.2"
 _AUTHOR = "vosmont"
 
 -- **************************************************
@@ -100,9 +100,6 @@ local VARIABLE = {
 	DIMMER_LEVEL_OLD = { "urn:upnp-org:serviceId:ZiBlueDevice1", "LoadLevelStatus", true },
 	DIMMER_DIRECTION = { "urn:upnp-org:serviceId:ZiBlueDevice1", "LoadLevelDirection", true },
 	DIMMER_STEP = { "urn:upnp-org:serviceId:ZiBlueDevice1", "DimmingStep", true },
-	--PULSE_MODE = { "urn:upnp-org:serviceId:ZiBlueDevice1", "PulseMode", true },
-	--TOGGLE_MODE = { "urn:upnp-org:serviceId:ZiBlueDevice1", "ToggleMode", true },
-	--IGNORE_BURST_TIME = { "urn:upnp-org:serviceId:ZiBlueDevice1", "IgnoreBurstTime", true },
 	-- Scene controller
 	LAST_SCENE_ID = { "urn:micasaverde-com:serviceId:SceneController1", "LastSceneID", true, "LAST_SCENE_DATE" },
 	LAST_SCENE_DATE = { "urn:micasaverde-com:serviceId:SceneController1", "LastSceneTime", false },
@@ -144,14 +141,11 @@ local VARIABLE = {
 	DEBUG_MODE = { "urn:upnp-org:serviceId:ZiBlueGateway1", "DebugMode", true },
 	LAST_DISCOVERED = { "urn:upnp-org:serviceId:ZiBlueGateway1", "LastDiscovered", true },
 	LAST_UPDATE = { "urn:upnp-org:serviceId:ZiBlueGateway1", "LastUpdate", true },
-	LAST_MESSAGE = { "urn:upnp-org:serviceId:ZiBlueGateway1", "LastCommand", true },
-	ZIBLUE_VERSION = { "urn:upnp-org:serviceId:ZiBlueGateway1", "ZiBlueVersion", true },
-	ZIBLUE_MAC = { "urn:upnp-org:serviceId:ZiBlueGateway1", "ZiBlueMac", true },
+	LAST_MESSAGE = { "urn:upnp-org:serviceId:ZiBlueGateway1", "LastMessage", true },
 	-- Equipment
 	FEATURE = { "urn:upnp-org:serviceId:ZiBlueDevice1", "Feature", true },
 	ASSOCIATION = { "urn:upnp-org:serviceId:ZiBlueDevice1", "Association", true },
-	SETTING = { "urn:upnp-org:serviceId:ZiBlueDevice1", "Setting", true },
-	BURST = { "urn:upnp-org:serviceId:ZiBlueDevice1", "Burst", true }
+	SETTING = { "urn:upnp-org:serviceId:ZiBlueDevice1", "Setting", true }
 }
 
 -- Device types
@@ -294,7 +288,7 @@ local EQUIPMENT = {
 		modelings = {
 			{
 				mappings = {
-					{ features = { "state" } },
+					{ features = { "state" } }, -- not used
 					{ features = { "tamper", "alarm", "supervisor/alive" }, deviceTypes = { "BINARY_LIGHT", "DOOR_SENSOR", "MOTION_SENSOR", "SMOKE_SENSOR" }, settings = { "transmitter" } }
 				}
 			}
@@ -305,7 +299,7 @@ local EQUIPMENT = {
 		modelings = {
 			{
 				mappings = {
-					{ features = { "state" } },
+					{ features = { "state" } }, -- not used
 					{ features = { "button/command" }, deviceTypes = { "BINARY_LIGHT" }, settings = { "transmitter", "pulse" } },
 					{ features = { "button1" }, deviceTypes = { "BINARY_LIGHT" }, settings = { "transmitter", "pulse" } },
 					{ features = { "button2" }, deviceTypes = { "BINARY_LIGHT" }, settings = { "transmitter", "pulse" } },
@@ -315,13 +309,13 @@ local EQUIPMENT = {
 			},
 			{
 				mappings = {
-					{ features = { "state" } },
+					{ features = { "state" } }, -- not used
 					{ features = { "button1", "button2", "button3", "button4" }, deviceTypes = { "MULTI_SWITCH" }, settings = { "transmitter", "pulse" } }
 				}
 			},
 			{
 				mappings = {
-					{ features = { "state" } },
+					{ features = { "state" } }, -- not used
 					{ features = { "button1", "button2", "button3", "button4" }, deviceTypes = { "SCENE_CONTROLLER" }, settings = { "transmitter" } }
 				}
 			}
@@ -332,7 +326,7 @@ local EQUIPMENT = {
 		modelings = {
 			{
 				mappings = {
-					{ features = { "state" } },
+					{ features = { "state" } }, -- not used
 					{ features = { "up/on" }, deviceTypes = { "BINARY_LIGHT" }, settings = { "transmitter", "pulse" }, isUsed = true },
 					{ features = { "down/off" }, deviceTypes = { "BINARY_LIGHT" }, settings = { "transmitter", "pulse" }, isUsed = true },
 					{ features = { "my" }, deviceTypes = { "BINARY_LIGHT" }, settings = { "transmitter", "pulse" }, isUsed = true }
@@ -340,7 +334,7 @@ local EQUIPMENT = {
 			},
 			{
 				mappings = {
-					{ features = { "state" } },
+					{ features = { "state" } }, -- not used
 					{ features = { "up/on", "down/off", "my" }, deviceTypes = { "SHUTTER" }, settings = { "transmitter", "my=50" } }
 				}
 			}
@@ -351,7 +345,7 @@ local EQUIPMENT = {
 		modelings = {
 			{
 				mappings = {
-					{ features = { "state" } },
+					{ features = { "state" } }, -- not used
 					{ features = { "button1" }, deviceTypes = { "BINARY_LIGHT" }, settings = { "transmitter", "pulse" } },
 					{ features = { "button2" }, deviceTypes = { "BINARY_LIGHT" }, settings = { "transmitter", "pulse" } },
 					{ features = { "button3" }, deviceTypes = { "BINARY_LIGHT" }, settings = { "transmitter", "pulse" } },
@@ -360,13 +354,13 @@ local EQUIPMENT = {
 			},
 			{
 				mappings = {
-					{ features = { "state" } },
+					{ features = { "state" } }, -- not used
 					{ features = { "button1", "button2", "button3", "button4" }, deviceTypes = { "MULTI_SWITCH" }, settings = { "transmitter", "pulse" } }
 				}
 			},
 			{
 				mappings = {
-					{ features = { "state" } },
+					{ features = { "state" } }, -- not used
 					{ features = { "button1", "button2", "button3", "button4" }, deviceTypes = { "SCENE_CONTROLLER" }, settings = { "transmitter" } }
 				}
 			}
@@ -453,7 +447,7 @@ local EQUIPMENT = {
 		modelings = {
 			{
 				mappings = {
-					{ features = { "state" } },
+					{ features = { "state" } }, -- not used
 					{ features = { "tamper", "alarm" }, deviceTypes = { "DOOR_SENSOR", "MOTION_SENSOR", "SMOKE_SENSOR" }, settings = { "transmitter" } }
 				}
 			}
@@ -482,12 +476,9 @@ for _, equipmentInfos in pairs( EQUIPMENT ) do
 			end
 			local features = {}
 			for _, featureName in ipairs( mapping.features ) do
-				features[ featureName ] = { isUsed = mapping.isUsed }
+				features[ featureName ] = {}
 			end
 			mapping.features = features
-			if mapping.isUsed then
-				modeling.isUsed = true
-			end
 		end
 	end
 end
@@ -1590,11 +1581,10 @@ debug( "test", "Device.setModeStatus" )
 
 local _commandsToProcess = {}
 local _isProcessingCommand = false
-local _lastCommandsByEquipmentId = {} -- TODO ??
 
 Command = {
 
-	process = function( source, qualifier, data, lul_data )
+	process = function( source, qualifier, data )
 		local header = data.frame.header
 		local infos = data.frame.infos
 		local protocol = header.protocolMeaning
@@ -1605,41 +1595,49 @@ Command = {
 			frequency = ( ( header.dataFlag ~= "-1 " ) and tostring( ZIBLUE_FREQUENCY[ header.dataFlag ] ) or "" ),
 			quality = tonumber( header.rfQuality )
 		}
+		local isOk = true
 
 		-- Battery
 		if ( infos.lowBatt == "1" ) then
 			--_addCommand( "lowbatt", "lowbatt" )
-			Command.add( protocol, equipmentId, equipmentInfos, "lowbatt", "lowbatt" )
+			isOk = Command.add( protocol, equipmentId, equipmentInfos, "lowbatt", "lowbatt" ) and isOk
 		end
 		-- State
 		if ( infos.subTypeMeaning ) then
-			Command.add( protocol, equipmentId, equipmentInfos, "state", infos.subTypeMeaning, infos.subTypeMeaning )
+			isOk = Command.add( protocol, equipmentId, equipmentInfos, "state", infos.subTypeMeaning, infos.subTypeMeaning ) and isOk
 		end
 		-- Measures
 		if ( infos.measures ) then
 			for _, measure in ipairs( infos.measures ) do
-				Command.add( protocol, equipmentId, equipmentInfos, measure.type, measure.type, measure )
+				isOk = Command.add( protocol, equipmentId, equipmentInfos, measure.type, measure.type, measure ) and isOk
 			end
 		end
 		-- Flags (can be "LowBatt")
 		if ( infos.qualifierMeaning and infos.qualifierMeaning.flags ) then
 			for _, flag in ipairs( infos.qualifierMeaning.flags ) do
-				Command.add( protocol, equipmentId, equipmentInfos, flag, flag )
+				isOk = Command.add( protocol, equipmentId, equipmentInfos, flag, flag ) and isOk
 			end
 		end
 
 		if ( #_commandsToProcess > 0 ) then
 			luup.call_delay( _NAME ..".Command.deferredProcess", 0 )
 		end
+
+		return isOk
 	end,
 
 	add = function( protocol, equipmentId, equipmentInfos, featureName, commandName, data )
-		if not commandName then
-			return
-		end
-		commandName, featureName = string.lower(commandName), string.lower(featureName or "unknown")
+		commandName, featureName = string.lower(commandName or ""), string.lower(featureName or "")
 		local id = protocol .. ";" .. equipmentId
 		local msg = "Equipment '" .. id .. "'"
+		if string_isEmpty(featureName) then
+			error( msg .. " : no given feature", "Command.process" )
+			return false
+		end
+		if string_isEmpty(commandName) then
+			error( msg .. " : no given command", "Command.process" )
+			return false
+		end
 		local equipment, feature, devices = Equipments.get( protocol, equipmentId, featureName )
 		if equipment then
 			equipment.frequency = equipmentInfos.frequency
@@ -1667,17 +1665,19 @@ Command = {
 		end
 
 		-- TODO : surement un pb avec la feature status sans devicetype
-		if ( not equipment or ( not feature and ( featureName ~= "lowbatt" ) ) ) then
+		if ( ( featureName ~= "lowbatt" ) and ( not equipment or not feature ) ) then
 			-- Add this device to the discovered equipments (but not yet known)
 			local hasBeenAdded, isFeatureKnown = DiscoveredEquipments.add( protocol, equipmentId, equipmentInfos, featureName, data )
 			if hasBeenAdded then
-				debug( "This message is from an unknown " .. msg .. " for feature '" .. featureName .. "'", "Command.process" )
+				debug( msg .. ": unknown for feature '" .. featureName .. "'", "Command.process" )
 			elseif not isFeatureKnown then
-				error( "Feature '" .. featureName .. "' is not known for equipment '" .. id .. "', RF frame: " .. tostring(lul_data), "Command.process" )
+				error( msg .. ": feature '" .. featureName .. "' is not known", "Command.process" )
+				return false
 			else
-				debug( "This message is from an " .. msg .. " already discovered", "Command.process" )
+				debug( msg .. ": already discovered", "Command.process" )
 			end
 		end
+		return true
 	end,
 
 	deferredProcess = function()
@@ -1755,8 +1755,8 @@ Network = {
 							_settings.radio = Tools.extractInfos( data.radioStatus.band )
 						elseif data.parrotStatus then
 							Tools.updateParrotStatus( data.parrotStatus.info )
-						else
-							Command.process( source, qualifier, data, lul_data )
+						elseif not Command.process( source, qualifier, data ) then
+							error( "Error with RF frame: " .. tostring(lul_data), "Network.receive" )
 						end
 					else
 						error( "JSON error: " .. tostring( jsonError ), "Network.receive" )
@@ -2101,26 +2101,23 @@ DiscoveredEquipments = {
 		local isFeatureKnown = false
 		for _, modeling in ipairs( discoveredEquipment.modelings ) do
 			for _, mapping in ipairs( modeling.mappings ) do
-				if mapping.features[ featureName ] then
+				local feature = mapping.features[ featureName ]
+				if feature then
+					-- This mapping contains our feature
 					isFeatureKnown = true
-					local feature = mapping.features[ featureName ]
-					feature.isUsed = true
+					mapping.isUsed = true
 					if ( type( data ) == "table" ) then
 						feature.state = data.value .. " " .. data.unit
 						if ( ( featureName == "hygrometry" ) and ( data.value == "0" ) ) then
-							feature.isUsed = false
+							mapping.isUsed = false
 						end
 					else
 						feature.state = data
 					end
-					mapping.isUsed = false
-					for _, feature in pairs( mapping.features ) do
-						if feature.isUsed then
-							mapping.isUsed = true
-							modeling.isUsed = true
-						end
+					if mapping.isUsed then
+						modeling.isUsed = true
 					end
-					-- The features are unique in modelings
+					-- The features are unique in each modeling
 					break
 				end
 			end

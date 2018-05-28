@@ -26,6 +26,7 @@ Utils.initTokens( {
 	"ziblue_param": "Settings",
 	"ziblue_action": "Action",
 	"ziblue_last_update": "Last update",
+	"ziblue_communication_error": "Communication error",
 
 	// Settings
 	"ziblue_tab_settings": "ZiBlue Settings",
@@ -57,17 +58,19 @@ Utils.initTokens( {
 	// Managed equipments
 	"ziblue_tab_managed_equipments": "Managed equipments",
 	"ziblue_managed_equipments": "Managed equipments",
-	"ziblue_explanation_known_equipments": "This tab displays the ZiBlue equipment, known to Vera, and their associated modules on Vera.<br/><br/>\
-	Each associated module is managed directly by the home automation system as a standard module: for any standard action (like adding to scenarios, renaming, or even deleting), you can find it on the standard user interface.<br/><br/>\
+	"ziblue_explanation_known_equipments": "This tab displays the ZiBlue equipments, known to the home automation system, and their associated devices.<br/><br/>\
+	Each associated device is managed directly by the home automation system as a standard device : for any standard action (like adding to scenarios, renaming, or even deleting), you can find it on the standard user interface.<br/><br/>\
 	You can access the specific parameters/actions by clicking on the dedicated button <i class=\"fa fa-caret-down fa-lg\" aria-hidden=\"true\"></i>.",
 	"ziblue_no_equipment": "There's no equipment.",
-	"ziblue_explanation_association": "This panel displays the associations between the module associated with the equipment and modules or scenarios on the home automation system.<br/>\
-	It is a facility proposed by the plugin, which allows you to simply perform actions in response to a module state change, without having to create a scenario.<br/><br/>\
+	"ziblue_explanation_association": "This panel displays the associations between the device associated with the equipment and devices or scenarios on the home automation system.<br/>\
+	It is a facility proposed by the plugin, which allows you to simply perform actions in response to a device state change, without having to create a scenario.<br/><br/>\
 	For example, the activation of a remote control can turn on an outlet managed by the home automation system.",
-	"ziblue_explanation_param": "This panel displays the parameters (specific to the plugin) of the module associated with an equipment.<br/><br/>\
-	<b>Button:</b> Checked if the module says behave like a button, possibly in mode \"Pulse\" or \"Toggle\"<br/><br/>\
-	<b>Receiver:</b> Checked if the module represents receiver/actuator equipment. In this case the module is seen as a virtual transmitter equipment and must be associated with the receiver equipment to be able to control it.<br/>\
-	Normally this action was done when creating the module from the \"New equipment\" tab, otherwise it can be done from the functions button in the \"Managed equipments\" tab.<br/>\
+	"ziblue_explanation_param": "This panel displays the parameters (specific to the plugin) of the device associated with an equipment.<br/><br/>\
+	<b>Transmitter:</b> Checked if the device represents a transmitter equipment (e.g. a remote).<br/>\
+	The behavior of the linked device can be adjusted with the parameters \"Pulse\" or \"Toggle\"<br/><br/>\
+	<b>Receiver:</b> Checked if the device represents a receiver/actuator equipment (e.g. an outlet).<br/>\
+	In this case the device is seen as a virtual transmitter equipment and must be associated with the receiver equipment to be able to control it.<br/>\
+	Normally this action was done when creating the device from the \"New equipment\" tab, otherwise it can be done from the functions button in the \"Managed equipments\" tab.<br/>\
 	For more information on \"Qualify\" or \"Burst\" parameters, refer to the ZiBlue dongle manual.",
 	"ziblue_confirmation_teach_in_receiver": "Please put the receiver/actuator equipment in learning mode so that you can associate your virtual equipment with it.",
 
@@ -76,10 +79,14 @@ Utils.initTokens( {
 	"ziblue_discovered_equipments": "Discovered equipments",
 	"ziblue_explanation_discovered_equipments": "This tab displays the equipments exposed by the ZiBlue dongle and not yet known from the home automation system.<br/><br\>\
 	<b>Equipment:</b> a device exposed by the ZiBlue dongle. For example, a 433 MHz temperature probe.<br\>\
-	<b>Module:</b> a device managed by the home automation plant. For example, a Zwave motion detector.<br\><br\>\
-	To be able to use the equipment on the home automation system, you first have to teach it to the system, and define the modules that will be associated with this equipment.<br\>\
-	For example, equipment measuring temperature and humidity will be associated with 2 modules on the system: a temperature sensor and a humidity sensor.<br/><br\>\
-	The type of module can sometimes be chosen: this will not change the functionality but its representation in the user interface.",
+	<b>Device:</b> a device managed by the home automation system. For example, a Zwave motion detector.<br\><br\>\
+	To be able to use the equipments on the home automation system, you have to :<br/>\
+	<ul>\
+	<li>select a modeling (definition of the relationships between equipment and devices, by features).</li>\
+	<li>the type of device can sometimes be chosen: this will not change the functionality but its representation in the user interface.</li>\
+	<li>have the system learn this modeling.</li>\
+	</ul>\
+	For example, an equipment measuring temperature and humidity will be associated with 2 devices on the system: a temperature sensor and a humidity sensor.",
 	"ziblue_no_discovered_equipment": "There's no discovered equipment.",
 	"ziblue_select_equipment": "You have to select the equipment(s) you want to learn.",
 	"ziblue_confirmation_learning_equipments": "Confirmation for learning the equipments.",
@@ -106,6 +113,5 @@ Utils.initTokens( {
 	"urn:schemas-upnp-org:device:DimmableLight:1": "Dimmable Switch",
 	"urn:schemas-upnp-org:device:DimmableRGBLight:1": "Dimmable RGB",
 	"urn:schemas-upnp-org:device:Heater:1": "Heater",
-	"urn:schemas-upnp-org:device:HVAC_ZoneThermostat:1": "Thermostat",
-	"urn:schemas-upnp-org:device:JammingSensor:1": "Jamming sensor"
+	"urn:schemas-upnp-org:device:HVAC_ZoneThermostat:1": "Thermostat"
 } );

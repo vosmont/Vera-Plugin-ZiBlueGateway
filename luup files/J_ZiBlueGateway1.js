@@ -188,6 +188,7 @@ var ZiBlueGateway = ( function( api, $ ) {
 	var _uuid = "51d7cd82-355e-4dad-b5c9-100a74133220";
 	var PLUGIN_SID = "urn:upnp-org:serviceId:ZiBlueGateway1";
 	var PLUGIN_CHILD_SID = "urn:upnp-org:serviceId:ZiBlueDevice1";
+	var PLUGIN_REFRESH_INTERVAL = 5000;
 	var _deviceId = null;
 	var _lastUpdate = 0;
 	var _indexMappings = {};
@@ -411,7 +412,7 @@ var ZiBlueGateway = ( function( api, $ ) {
 		$.ajax( {
 			url: Utils.getDataRequestURL() + "id=lr_" + _pluginName + "&command=getEquipmentsInfos&output_format=json#",
 			dataType: "json",
-			timeout: 1000
+			timeout: PLUGIN_REFRESH_INTERVAL
 		} )
 		.done( function( infos ) {
 			if ( $.isPlainObject( infos ) ) {
@@ -436,7 +437,7 @@ var ZiBlueGateway = ( function( api, $ ) {
 	}
 	function _resumeEquipmentsRefresh() {
 		if ( _equipmentsTimeout == null ) {
-			var timeout = 3000 - ( Date.now() - _equipmentsLastRefresh );
+			var timeout = PLUGIN_REFRESH_INTERVAL - ( Date.now() - _equipmentsLastRefresh );
 			if ( timeout < 0 ) {
 				timeout = 0;
 			}
@@ -496,7 +497,6 @@ var ZiBlueGateway = ( function( api, $ ) {
 						+			'<th>' + Utils.getLangString( _prefix + "_protocol" ) + '</th>'
 						+			'<th>' + Utils.getLangString( _prefix + "_id" ) + '</th>'
 						+			'<th>' + Utils.getLangString( _prefix + "_signal_quality" ) + '</th>'
-						+			'<th>' + Utils.getLangString( _prefix + "_last_update" ) + '</th>'
 						+			'<th>' + Utils.getLangString( _prefix + "_feature" ) + '</th>'
 						+		'</tr>';
 					$.each( infos.equipments, function( i, equipment ) {
@@ -505,7 +505,6 @@ var ZiBlueGateway = ( function( api, $ ) {
 							+		'<td class="' + _prefix + '-protocol-name">' + equipment.protocol + '</td>'
 							+		'<td class="' + _prefix + '-protocol-id">' + equipment.id + ( equipment.isNew ? ' <span style="color:red">NEW</span>' : '' ) + '</td>'
 							+		'<td>' + ( equipment.quality >= 0 ? equipment.quality : '' ) + '</td>'
-							+		'<td>' + _convertTimestampToLocaleString( equipment.lastUpdate ) + '</td>'
 							+		'<td>'
 /*
 						// Sort features of the equipment by linked device names
@@ -520,7 +519,8 @@ var ZiBlueGateway = ( function( api, $ ) {
 							return 0;
 						});
 */
-						html +=			'<div class="' + _prefix + '-equipment-mappings">';
+						html +=			'<div class="' + _prefix + '-equipment-last-update">' + _convertTimestampToLocaleString( equipment.lastUpdate ) + '</div>'
+							+			'<div class="' + _prefix + '-equipment-mappings">';
 						$.each( equipment.mappings, function( i, mapping ) {
 							html +=			'<div class="' + _prefix + '-equipment-mapping">';
 
@@ -566,7 +566,11 @@ var ZiBlueGateway = ( function( api, $ ) {
 				}
 				_equipmentsLastRefresh = Date.now();
 				_resumeEquipmentsRefresh();
-			} );
+			})
+			.fail( function() {
+				$("#" + _prefix + "-known-equipments").html( Utils.getLangString( _prefix + "_communication_error" ) );
+				_resumeEquipmentsRefresh();
+			});
 	}
 
 	/**
@@ -1243,7 +1247,7 @@ var ZiBlueGateway = ( function( api, $ ) {
 	/**
 	 *
 	 */
-	function _getSettings() {
+	function _getEquipmentSettings() {
 		var settings = { settings: [] };
 		$( '#' + _prefix + '-add-equipment-panel .' + _prefix + '-setting-value' ).each( function() {
 			var variableName = $( this ).data( 'variable' );
@@ -1298,7 +1302,7 @@ var ZiBlueGateway = ( function( api, $ ) {
 
 				$( "#" + _prefix + "-add-equipment-panel" )
 					.on( "click", "." + _prefix + "-teach", function() {
-						var settings = _getSettings();
+						var settings = _getEquipmentSettings();
 						if ( settings ) {
 							var $that = $( this ).addClass( "highlighted" );
 							$.when( _performActionTeachIn( settings.protocol + ";" + settings.equipmentId, settings.action, settings.message ) )
@@ -1307,7 +1311,7 @@ var ZiBlueGateway = ( function( api, $ ) {
 						}
 					})
 					.on( "click", "." + _prefix + "-test-on", function() {
-						var settings = _getSettings();
+						var settings = _getEquipmentSettings();
 						if ( settings ) {
 							var $that = $( this ).addClass( "highlighted" );
 							$.when( _performActionSetTarget( settings.protocol + ";" + settings.equipmentId + ( settings.qualifier ? ";" + settings.qualifier : "" ), "1" ) )
@@ -1315,7 +1319,7 @@ var ZiBlueGateway = ( function( api, $ ) {
 						}
 					})
 					.on( "click", "." + _prefix + "-test-off", function() {
-						var settings = _getSettings();
+						var settings = _getEquipmentSettings();
 						if ( settings ) {
 							var $that = $( this ).addClass( "highlighted" );
 							$.when( _performActionSetTarget( settings.protocol + ";" + settings.equipmentId + ( settings.qualifier ? ";" + settings.qualifier : "" ), "0" ) )
@@ -1325,7 +1329,7 @@ var ZiBlueGateway = ( function( api, $ ) {
 					.on( "click", "." + _prefix + "-create", function() {
 						var $that = $( this );
 						var d = $.Deferred();
-						var settings = _getSettings();
+						var settings = _getEquipmentSettings();
 						if ( !hasTeachingBeenDone ) {
 							api.ui.showMessagePopup( Utils.getLangString( _prefix + "_warning_teach_in_not_done" ), 4, 0, {
 								onSuccess: function() {
@@ -1371,7 +1375,7 @@ var ZiBlueGateway = ( function( api, $ ) {
 	}
 	function _resumeDiscoveredEquipmentsRefresh() {
 		if ( _discoveredEquipmentsTimeout == null ) {
-			var timeout = 3000 - ( Date.now() - _discoveredEquipmentsLastRefresh );
+			var timeout = PLUGIN_REFRESH_INTERVAL - ( Date.now() - _discoveredEquipmentsLastRefresh );
 			if ( timeout < 0 ) {
 				timeout = 0;
 			}
@@ -1405,7 +1409,6 @@ var ZiBlueGateway = ( function( api, $ ) {
 						+			'<th>' + Utils.getLangString( _prefix + "_protocol" ) + '</th>'
 						+			'<th>' + Utils.getLangString( _prefix + "_id" ) + '</th>' // TODO : Frequency ?
 						+			'<th>' + Utils.getLangString( _prefix + "_signal_quality" ) + '</th>'
-						+			'<th>' + Utils.getLangString( _prefix + "_last_update" ) + '</th>'
 						+			'<th>' + Utils.getLangString( _prefix + "_feature" ) + '</th>'
 						+		'</tr>';
 					$.each( infos.discoveredEquipments, function( i, discoveredEquipment ) {
@@ -1413,8 +1416,8 @@ var ZiBlueGateway = ( function( api, $ ) {
 							+		'<td class="' + _prefix + '-protocol-name">' + discoveredEquipment.protocol + '</td>'
 							+		'<td class="' + _prefix + '-protocol-id">' + discoveredEquipment.id + '</td>'
 							+		'<td>' + ( discoveredEquipment.quality >= 0 ? discoveredEquipment.quality : '' ) + '</td>'
-							+		'<td>' + _convertTimestampToLocaleString( discoveredEquipment.lastUpdate ) + '</td>'
 							+		'<td>'
+							+			'<div class="' + _prefix + '-equipment-last-update">' + _convertTimestampToLocaleString( discoveredEquipment.lastUpdate ) + '</div>'
 							+			'<div class="font-weight-bold">' + discoveredEquipment.name + '</div>';
 						if ( discoveredEquipment.comment ) {
 							html +=		'<div>' + discoveredEquipment.comment + '</div>';
@@ -1429,16 +1432,13 @@ var ZiBlueGateway = ( function( api, $ ) {
 								+			'</div>'
 								+			'<div class="' + _prefix + '-equipment-mappings">';
 							$.each( modeling.mappings, function( j, mapping ) {
-								if ( mapping.isUsed === false ) {
+								if ( ( mapping.isUsed === false ) || !mapping.deviceTypes ) {
 									return;
 								}
 								var featureNames = [];
 								html +=			'<div class="' + _prefix + '-equipment-mapping">'
 									+				'<div class="' + _prefix + '-features">';
 								$.each( mapping.features, function( featureName, feature ) {
-									if ( feature.isUsed === false ) {
-										return;
-									}
 									featureNames.push( featureName );
 									html +=				'<div class="' + _prefix + '-feature">'
 										+					'<span class="' + _prefix + '-feature-name">' + featureName + '</span>'
@@ -1474,7 +1474,11 @@ var ZiBlueGateway = ( function( api, $ ) {
 				}
 				_discoveredEquipmentsLastRefresh = Date.now();
 				_resumeDiscoveredEquipmentsRefresh();
-			} );
+			})
+			.fail( function() {
+				$("#" + _prefix + "-discovered-equipments").html( Utils.getLangString( _prefix + "_communication_error" ) );
+				_resumeDiscoveredEquipmentsRefresh();
+			});
 	}
 
 	/**

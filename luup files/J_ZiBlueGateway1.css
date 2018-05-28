@@ -38,10 +38,11 @@ span.ziblue-association span { padding: 1px; }
 }
 .ziblue-equipment-mappings {
 	display: inline-block;
-	width: 90%;
 	padding: 1px;
 	background: #00a652;
 }
+#ziblue-known-equipments .ziblue-equipment-mappings { width: 100%; }
+#ziblue-discovered-equipments .ziblue-equipment-mappings { width: 90%; }
 .ziblue-equipment-mapping {
 	margin: 2px;
 	padding: 3px;

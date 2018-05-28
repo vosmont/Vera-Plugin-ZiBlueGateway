@@ -26,6 +26,7 @@ Utils.initTokens( {
 	"ziblue_param": "Paramétrage",
 	"ziblue_action": "Action",
 	"ziblue_last_update": "Dernière modification",
+	"ziblue_communication_error": "Erreur de communication",
 
 	// Settings
 	"ziblue_tab_settings": "Paramètres ZiBlue",
@@ -57,7 +58,7 @@ Utils.initTokens( {
 	// Managed equipments
 	"ziblue_tab_managed_equipments": "Equipements gérés",
 	"ziblue_managed_equipments": "Equipements gérés",
-	"ziblue_explanation_known_equipments": "Cet onglet affiche les équipements ZiBlue, connus de la Vera, et leurs modules associés sur la Vera.<br/><br/>\
+	"ziblue_explanation_known_equipments": "Cet onglet affiche les équipements ZiBlue, connus de la centrale domotique, et leurs modules associés.<br/><br/>\
 	Chaque module associé est géré directement par le contrôleur domotique comme un module standard : pour toute action standard (comme ajouter à des scénarios, renommer, voire supprimer), vous le retrouvez sur l'interface utilisateur standard.<br/><br/>\
 	Vous pouvez accéder aux paramétrages/actions spécifiques en cliquant sur le bouton dédié : <i class=\"fa fa-caret-down fa-lg\" aria-hidden=\"true\"></i>.",
 	"ziblue_no_equipment": "Il n'y a pas d'équipement.",
@@ -65,8 +66,10 @@ Utils.initTokens( {
 	C'est une facilité proposée par le plugin, qui vous permet d'effectuer simplement des actions en réponse à un changement d'état du module, sans devoir créer un scénario.<br/><br/>\
 	Par exemple, l'activation d'une télécommande peut allumer une prise gérée par la centrale domotique.",
 	"ziblue_explanation_param": "Ce panneau affiche les paramètres (spécifiques au plugin), du module associé à un équipement.<br/><br/>\
-	<b>Button:</b> Coché si le module dit se comporter comme un bouton, éventuellement en mode \"Pulse\" ou \"Toggle\"<br/><br/>\
-	<b>Receiver:</b> Coché si le module représente un équipement récepteur/actionneur. Dans ce cas le module est vu comme un équipement émetteur virtuel et doit être associé à l'équipement récepteur pour pouvoir le contrôler.<br/>\
+	<b>Transmitter:</b> Coché si le module représente un équipement émetteur (une télécommande par exemple).<br/>\
+	Le comportement du module lié peut être ajusté avec les paramètres \"Pulse\" ou \"Toggle\"<br/><br/>\
+	<b>Receiver:</b> Coché si le module représente un équipement récepteur/actionneur (une prise par exemple).<br/>\
+	Dans ce cas, il est vu comme un équipement émetteur virtuel qui doit être associé à l'équipement récepteur pour pouvoir le contrôler.<br/>\
 	Normalement cette action a été faite lors de la création du module depuis l'onglet \"Nouvel équipement\", sinon elle peut être faite depuis le bouton de fonctions dans l'onglet \"Equipements gérés\".<br/>\
 	Pour plus d'information sur les paramètres \"Qualifier\" ou \"Burst\", référez-vous au manuel du dongle ZiBlue.",
 	"ziblue_confirmation_teach_in_receiver": "Veuillez mettre l'équipement récepteur/actionneur en mode apprentissage, afin de pouvoir y associer votre équipement virtuel.",
@@ -77,9 +80,13 @@ Utils.initTokens( {
 	"ziblue_explanation_discovered_equipments": "Cet onglet affiche les équipements exposés par le dongle ZiBlue et non encore connus de la centrale domotique.<br/><br\>\
 	<b>Equipement:</b> un appareil exposé par le dongle ZiBlue. Par exemple, une sonde de température en 433Mhz.<br\>\
 	<b>Module:</b> un appareil géré par la centrale domotique. Par exemple, un détecteur de mouvement Zwave.<br\><br\>\
-	Pour pouvoir utiliser les équipements sur la centrale domotique, il faut d'abord les faire apprendre à la centrale, et définir les modules qui seront associés à cet équipement.<br/>\
-	Par exemple, un équipement relevant la température et l'hygrométrie sera associé à 2 modules sur la centrale : un capteur de température et un capteur d'humidité.<br/><br\>\
-	Le type du module peut parfois être choisi : cela ne changera pas la fonctionnalité mais sa représentation dans l'interface utilisateur.",
+	Pour pouvoir utiliser les équipements sur la centrale domotique, il faut:<br/>\
+	<ul>\
+	<li>sélectionner une modélisation (définition des relations entre équipements et modules, par fonctionalités).</li>\
+	<li>le type du module peut parfois être choisi : cela ne changera pas la fonctionnalité mais sa représentation dans l'interface utilisateur.</li>\
+	<li>faire apprendre à la centrale cette modélisation.</li>\
+	</ul>\
+	Par exemple, un équipement relevant la température et l'hygrométrie sera associé à 2 modules sur la centrale : un capteur de température et un capteur d'humidité.",
 	"ziblue_no_discovered_equipment": "Il n'y a pas d'équipement découvert.",
 	"ziblue_select_equipment": "Vous devez sélectionner le(s) équipement(s) que vous voulez apprendre.",
 	"ziblue_confirmation_learning_equipments": "Veuillez confirmer les équipements à apprendre.",
@@ -106,6 +113,5 @@ Utils.initTokens( {
 	"urn:schemas-upnp-org:device:DimmableLight:1": "Variateur",
 	"urn:schemas-upnp-org:device:DimmableRGBLight:1": "Variateur RGB",
 	"urn:schemas-upnp-org:device:Heater:1": "Radiateur",
-	"urn:schemas-upnp-org:device:HVAC_ZoneThermostat:1": "Thermostat",
-	"urn:schemas-upnp-org:device:JammingSensor:1": "Détecteur de brouillage"
+	"urn:schemas-upnp-org:device:HVAC_ZoneThermostat:1": "Thermostat"
 } );
