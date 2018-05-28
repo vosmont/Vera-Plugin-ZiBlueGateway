@@ -13,6 +13,8 @@ This plugin is a gateway to the ZiBlue [RFP1000](http://rfplayer.com/en/zikeys-r
 <br/>
 <br/>
 <br/>
+<br/>
+<br/>
 
 Please note these concepts first :
 - **HAS**: Home Automation System (Vera or openLuup)
