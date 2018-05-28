@@ -3,12 +3,16 @@
 
 <img align="left" src="media/rfp1000.jpg"> 
 <br/>
+<br/>
 
 Designed for [Vera Control, Ltd.](http://getvera.com) Home Controllers (UI7) and [openLuup](https://github.com/akbooer/openLuup).
 
 ## Introduction
 
 This plugin is a gateway to the ZiBlue [RFP1000](http://rfplayer.com/en/zikeys-rfp1000/), and brings compatibility with lots of 433 & 868Mhz protocols.
+<br/>
+<br/>
+<br/>
 
 Please note these concepts first :
 - **HAS**: Home Automation System (Vera or openLuup)
