@@ -188,7 +188,8 @@ var ZiBlueGateway = ( function( api, $ ) {
 	var _uuid = "51d7cd82-355e-4dad-b5c9-100a74133220";
 	var PLUGIN_SID = "urn:upnp-org:serviceId:ZiBlueGateway1";
 	var PLUGIN_CHILD_SID = "urn:upnp-org:serviceId:ZiBlueDevice1";
-	var PLUGIN_REFRESH_INTERVAL = 5000;
+	var PLUGIN_REFRESH_TIMEOUT = 30;
+	var PLUGIN_REFRESH_INTERVAL = 5;
 	var _deviceId = null;
 	var _lastUpdate = 0;
 	var _indexMappings = {};
@@ -412,7 +413,7 @@ var ZiBlueGateway = ( function( api, $ ) {
 		$.ajax( {
 			url: Utils.getDataRequestURL() + "id=lr_" + _pluginName + "&command=getEquipmentsInfos&output_format=json#",
 			dataType: "json",
-			timeout: PLUGIN_REFRESH_INTERVAL
+			timeout: PLUGIN_REFRESH_TIMEOUT * 1000
 		} )
 		.done( function( infos ) {
 			if ( $.isPlainObject( infos ) ) {
@@ -437,7 +438,7 @@ var ZiBlueGateway = ( function( api, $ ) {
 	}
 	function _resumeEquipmentsRefresh() {
 		if ( _equipmentsTimeout == null ) {
-			var timeout = PLUGIN_REFRESH_INTERVAL - ( Date.now() - _equipmentsLastRefresh );
+			var timeout = PLUGIN_REFRESH_INTERVAL * 1000 - ( Date.now() - _equipmentsLastRefresh );
 			if ( timeout < 0 ) {
 				timeout = 0;
 			}
@@ -1375,7 +1376,7 @@ var ZiBlueGateway = ( function( api, $ ) {
 	}
 	function _resumeDiscoveredEquipmentsRefresh() {
 		if ( _discoveredEquipmentsTimeout == null ) {
-			var timeout = PLUGIN_REFRESH_INTERVAL - ( Date.now() - _discoveredEquipmentsLastRefresh );
+			var timeout = PLUGIN_REFRESH_INTERVAL * 1000 - ( Date.now() - _discoveredEquipmentsLastRefresh );
 			if ( timeout < 0 ) {
 				timeout = 0;
 			}

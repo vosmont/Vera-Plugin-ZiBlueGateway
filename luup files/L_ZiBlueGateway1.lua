@@ -23,7 +23,7 @@ local hasJson, json = pcall( require, "dkjson" )
 
 _NAME = "ZiBlueGateway"
 _DESCRIPTION = "ZiBlue gateway for the Vera"
-_VERSION = "1.2"
+_VERSION = "1.2.1"
 _AUTHOR = "vosmont"
 
 -- **************************************************
@@ -2467,7 +2467,7 @@ setmetatable( _handlerCommands, {
 
 local function _handleCommand( lul_request, lul_parameters, lul_outputformat )
 	local command = lul_parameters["command"] or "default"
-	log( "Get handler for command '" .. tostring(command) .."'", "handleCommand" )
+	debug( "Get handler for command '" .. tostring(command) .."'", "handleCommand" )
 	return _handlerCommands[command]( lul_parameters, lul_outputformat )
 end
 
