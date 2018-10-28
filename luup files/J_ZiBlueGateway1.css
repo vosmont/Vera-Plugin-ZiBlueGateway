@@ -23,7 +23,9 @@ span.ziblue-association span { padding: 1px; }
 .ziblue-association-scene .ziblue-long-press   { color: white; background: green; border: 1px solid green; }
 .ziblue-association-equipment .ziblue-short-press  { color: white; background: purple; border: 1px solid purple; }
 
-
+.ziblue-equipment-endpoint {
+	float: left;
+}
 .ziblue-equipment-modeling {
 }
 .ziblue-modeling-select {
@@ -59,22 +61,18 @@ span.ziblue-association span { padding: 1px; }
 }
 
 
-.ziblue-short-press {}
 table.ziblue-feature-group tr { border: 1px solid #ccc; }
 table.ziblue-feature-group td { padding: 5px; }
+.ziblue-short-press {}
 .ziblue-long-press { border: red; }
 
 .ziblue-protocol-name { font-weight: bold; }
 .ziblue-protocol-id { font-weight: bold; }
 .ziblue-device-name { font-weight: bold; }
 
-.ziblue-features {
-	color: #fff;
-	background: #00a652;
-	padding: 2px;
-}
+.ziblue-features { color: #fff;	background: #00a652; padding: 2px; }
 .ziblue-feature-name { font-weight: bold; font-style: italic; }
-.ziblue-feature-state { font-style: italic; margin-left: 5px; }
+.ziblue-feature-data { font-style: italic; margin-left: 5px; }
 
 
 #ziblue-equipments-actions {
@@ -83,6 +81,7 @@ table.ziblue-feature-group td { padding: 5px; }
 }
 #ziblue-equipments-actions td { padding: 5px; }
 #ziblue-equipments-actions button { margin: 2px; }
+
 #ziblue-equipments-association {
 	position: absolute; top: 0px; left: 0px;
 	width: 100%;

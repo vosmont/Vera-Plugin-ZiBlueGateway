@@ -137,14 +137,28 @@
 			<serviceId>urn:upnp-org:serviceId:ZiBlueGateway1</serviceId>
 			<name>TeachIn</name>
 			<run>
-				return plugin.Main.startJob( plugin.Main.teachIn, lul_settings.productId, lul_settings.action, lul_settings.comment )
+				return plugin.Main.startJob( plugin.Main.teachIn, lul_settings.protocol, lul_settings.equipmentId, lul_settings.settings, lul_settings.action, lul_settings.comment )
+			</run>
+		</action>
+		<action>
+			<serviceId>urn:upnp-org:serviceId:ZiBlueGateway1</serviceId>
+			<name>Clear</name>
+			<run>
+				return plugin.Main.startJob( plugin.Main.clear, lul_settings.protocol, lul_settings.equipmentId, lul_settings.settings )
 			</run>
 		</action>
 		<action>
 			<serviceId>urn:upnp-org:serviceId:ZiBlueGateway1</serviceId>
 			<name>SetTarget</name>
 			<job>
-				return plugin.Main.startJob( plugin.Main.setTarget, lul_settings.productId, lul_settings.newTargetValue )
+				return plugin.Main.startJob( plugin.Main.setTarget, lul_settings.protocol, lul_settings.equipmentId, lul_settings.settings, lul_settings.newTargetValue )
+			</job>
+		</action>
+		<action>
+			<serviceId>urn:upnp-org:serviceId:ZiBlueGateway1</serviceId>
+			<name>SetParam</name>
+			<job>
+				return plugin.Main.startJob( plugin.Main.setParam, lul_settings.paramName, paramValue )
 			</job>
 		</action>
 		<action>
