@@ -143,6 +143,11 @@
 		// Execute loaders
 		$.when.apply( $, loaders )
 			.done( function( xml, textStatus, jqxhr ) {
+				if ( jqxhr && jqxhr.responseText === "" ) {
+					// The Vera returns an empty file even if it does not exist :(
+					d.reject();
+					return;
+				}
 				if (loaders.length === 1) {
 					_resourceLoaded[ jqxhr.name ] = true;
 				} else if (loaders.length > 1) {
@@ -276,16 +281,14 @@ var ZiBlueGateway = ( function( api, $ ) {
 	 */
 	function _getSettingHtml( setting ) {
 		var className = _prefix + "-setting-value" + ( setting.className ? " " + setting.className : "" );
+		var settingName = setting.name || setting.variable;
 		var html = '<div class="' + _prefix + '-setting ui-widget-content ui-corner-all">'
-			+			'<span>' + Utils.getLangString( setting.name || setting.variable ) + '</span>';
+			+			'<span>' + Utils.getLangString( _prefix + "_" + settingName, settingName ) + '</span>';
 		if ( setting.type == "checkbox" ) {
 			html += '<input type="checkbox"'
 				+		( ( setting.value === true ) ? ' checked="checked"' : '' )
 				+		( ( setting.isReadOnly === true ) ? ' disabled="disabled"' : '' )
 				+		' class="' + className + '" data-setting="' + setting.variable  + '">';
-		} else if ( setting.type == "string" ) {
-			var value = ( setting.value ? setting.value : ( setting.defaultValue ? setting.defaultValue : '' ) );
-			html +=	'<input type="text" value="' + value + '" class="' + className + '" data-setting="' + setting.variable  + '">';
 		} else if ( setting.type == "select" ) {
 			html +=	'<select class="' + className + '" data-setting="' + setting.variable + '">';
 			$.each( setting.values, function( i, value ) {
@@ -300,10 +303,12 @@ var ZiBlueGateway = ( function( api, $ ) {
 				html +=	'<option value="' + value + '"' + ( isSelected ? ' selected' : '' ) + '>' + value + '</option>';
 			} );
 			html +=	'</select>';
+		} else {
+			var value = ( setting.value ? setting.value : ( setting.defaultValue ? setting.defaultValue : '' ) );
+			html +=	'<input type="text" value="' + value + '" class="' + className + '" data-setting="' + setting.variable  + '">';
 		}
-		if ( setting.action ) {
-			// TODO
-			html +=	'<button type="button" class="' + _prefix + '-set-variable" data-action="' + setting.action  + '">Set</button>'
+		if ( setting.action == "SetParam" ) {
+			html +=	'<button type="button" class="' + _prefix + '-set-param" data-name="' + setting.variable  + '">Set</button>'
 		}
 		if ( setting.comment ) {
 			html +=	'<span class="' + _prefix + '-setting-comment">' + setting.comment + '</span>';
@@ -401,7 +406,10 @@ var ZiBlueGateway = ( function( api, $ ) {
 					$( "#" + _prefix + "-plugin-settings" )
 						.on( "click", "." + _prefix + "-help", function() {
 							$( this ).parent().next( "." + _prefix + "-explanation" ).toggleClass( _prefix + "-hidden" );
-						} )
+						})
+						.on( "click", "." + _prefix + "-set-param", function() {
+							_performActionSetParam( $( this ).data( "name" ), $( this ).prev( "." + _prefix + "-setting-value" ).val() );
+						});
 				})
 				.fail( function() {
 					api.setCpanelContent( Utils.getLangString( _prefix + "_communication_error" ) );
@@ -539,13 +547,11 @@ var ZiBlueGateway = ( function( api, $ ) {
 							$.each( mapping.features, function( featureName, feature ) {
 								html +=				'<div class="' + _prefix + '-feature">'
 									+					'<span class="' + _prefix + '-feature-name">' + featureName + '</span>'
-									+					( feature.data ? '<span class="' + _prefix + '-feature-data">' + feature.data + ( feature.unit ? feature.unit : '' ) + '</span>' : '' )
+									+					( feature.data ? '<span class="' + _prefix + '-feature-data">' + feature.data + ( feature.unit ? ' ' + feature.unit : '' ) + '</span>' : '' )
 									+					( feature.comment ? '<div class="' + _prefix + '-feature-comment">' + feature.comment + '</div>' : '' )
 									+				'</div>';
 							});
 							html +=				'</div>';
-
-							html +=				'<div class="' + _prefix + '-equipment-endpoint">' + mapping.endpointId + '</div>';
 
 							var device = mapping.device;
 							_indexMappings[ device.id.toString() ] = [ equipment, mapping ];
@@ -555,6 +561,8 @@ var ZiBlueGateway = ( function( api, $ ) {
 								+					'<div><span class="' + _prefix + '-device-name">' + haDevice.name + '</span> (#' + device.id + ')</div>'
 								+					'<div>'
 								+						Utils.getLangString( _prefix + "_" + haDevice.device_type )
+								+					'</div>'
+								+					'<div class="' + _prefix + '-device-settings">'
 								+						( device.settings.momentary ? ' MOMENTARY' : '' )
 								+						( device.settings.toggle ? ' TOGGLE' : '' )
 								+					'</div>'
@@ -565,8 +573,13 @@ var ZiBlueGateway = ( function( api, $ ) {
 								//+						_getAssociationHtml( "scene", device.association.scenes, 1 )
 								+						_getAssociationHtml( "equipment", device.association.equipments, 0 )
 								+					'</div>'
-								+				'</div>'
-								+			'</div>';
+								+				'</div>';
+
+							if ( mapping.endpointId ) {
+								html +=			'<div class="' + _prefix + '-equipment-endpoint">' + mapping.endpointId + '</div>';
+							}
+
+							html +=			'</div>';
 						});
 						html +=			'</div>'
 							+		'</td>'
@@ -593,19 +606,31 @@ var ZiBlueGateway = ( function( api, $ ) {
 	function _showEquipmentActions( position, equipment, mapping ) {
 		_stopEquipmentsRefresh();
 		var settings = mapping.device.settings;
+		var luDevice = api.getDeviceObject( mapping.device.id );
+		// Check if device is compatible with association
+		var isCompatible = false;
+		for ( var j = 0; j < luDevice.states.length; j++ ) {
+			if ( ( luDevice.states[j].service === SWP_SID ) || ( luDevice.states[j].service === SWD_SID ) || ( luDevice.states[j].service === SES_SID ) ) {
+				isCompatible = true;
+				break;
+			}
+		}
+
 		var html = '<table>'
 				+		'<tr>'
 				+			'<td>'
-				+				( settings.transmitter ?
-								'<button type="button" class="' + _prefix + '-show-association">Associate</button>'
+				+				( settings.transmitter && isCompatible ?
+								'<button type="button" class="' + _prefix + '-show-association">' + Utils.getLangString( _prefix + "_associate" ) + '</button>'
 								: '')
-				+				'<button type="button" class="' + _prefix + '-show-params">Params</button>'
+				+				'<button type="button" class="' + _prefix + '-show-params">' + Utils.getLangString( _prefix + "_params" ) + '</button>'
 				+			'</td>';
 		if ( settings.receiver ) {
 			html +=			'<td bgcolor="#FF0000">'
-				+				'<button type="button" class="' + _prefix + '-teach">Teach in</button>'
-				//+				'<button type="button" class="' + _prefix + '-clear">Clear</button>'
-				+			'</td>';
+				+				'<button type="button" class="' + _prefix + '-teach">' + Utils.getLangString( _prefix + "_teach" ) + '</button>';
+			if ( equipment.protocol == "EDISIO" ) {
+				html +=			'<button type="button" class="' + _prefix + '-clean">' + Utils.getLangString( _prefix + "_clean" ) + '</button>';
+			}
+			html +=			'</td>';
 		}
 		html +=			'</tr>'
 			+		'</table>';
@@ -836,7 +861,6 @@ var ZiBlueGateway = ( function( api, $ ) {
 						type: "checkbox",
 						className: _prefix + "-hider",
 						variable: "transmitter",
-						name: _prefix + "_transmitter",
 						value: settings.transmitter
 					})
 			+	'</h3>'
@@ -844,13 +868,12 @@ var ZiBlueGateway = ( function( api, $ ) {
 		$.each( [
 			[ "toggle", "checkbox" ],
 			[ "momentary", "checkbox" ],
-			[ "timeForLongPress", "string" ],
-			[ "timeout", "string" ]
+			[ "timeout", "string" ],
+			[ "timeForLongPress", "string" ]
 		], function( i, setting ) {
 			html += _getSettingHtml({
 				type: setting[1],
 				variable: setting[0],
-				name: _prefix + "_" + setting[0],
 				value: settings[setting[0]]
 			});
 		});
@@ -862,7 +885,6 @@ var ZiBlueGateway = ( function( api, $ ) {
 						type: "checkbox",
 						className: _prefix + "-hider",
 						variable: "receiver",
-						name: _prefix + "_receiver",
 						value: settings.receiver
 					})
 			+	'</h3>'
@@ -874,7 +896,6 @@ var ZiBlueGateway = ( function( api, $ ) {
 				html += _getSettingHtml({
 				type: setting[1],
 				variable: setting[0],
-				name: _prefix + "_" + setting[0],
 				value: settings[setting[0]]
 			});
 		});
@@ -888,8 +909,6 @@ var ZiBlueGateway = ( function( api, $ ) {
 					type: ( ( typeof paramValue == "boolean" ) ? "checkbox" : "string" ),
 					isReadOnly: true,
 					variable: paramName,
-					name: paramName,
-					name: _prefix + "_" + paramName,
 					value: paramValue
 				});
 			}
@@ -1048,11 +1067,11 @@ var ZiBlueGateway = ( function( api, $ ) {
 							}
 						});
 					} )
-					// Clear (receiver) event
+					// Clean (receiver) event
 					.on( "click", "." + _prefix + "-clear", function() {
 						var $actions = $( this ).parents( "#" + _prefix + "-equipments-actions" );
 						var equipment = $actions.data( "equipment" );
-						api.ui.showMessagePopup( Utils.getLangString( _prefix + "_confirmation_clearing_receiver" ), 4, 0, {
+						api.ui.showMessagePopup( Utils.getLangString( _prefix + "_confirmation_cleaning_receiver" ), 4, 0, {
 							onSuccess: function() {
 								_performActionClear( equipment.protocol + ";" + equipment.id );
 								return true;
@@ -1163,7 +1182,7 @@ var ZiBlueGateway = ( function( api, $ ) {
 					var protocolName = $(this).val();
 					var protocolInfos = protocolsInfos[ protocolName ];
 					if ( typeof protocolInfos != "undefined") {
-						_drawProtocolSettings( protocolInfos.deviceTypes || [], protocolInfos.deviceSettings || [], protocolInfos.protocolSettings || {} );
+						_drawProtocolSettings( protocolInfos.features || [], protocolInfos.deviceTypes || [], protocolInfos.deviceSettings || [], protocolInfos.protocolSettings || {} );
 					}
 					_drawProtocolValidation( protocolName );
 				});
@@ -1192,7 +1211,7 @@ var ZiBlueGateway = ( function( api, $ ) {
 	/**
 	 * Draw and manage the protocol settings
 	 */
-	function _drawProtocolSettings( deviceTypes, deviceSettings, protocolSettings ) {
+	function _drawProtocolSettings( features, deviceTypes, deviceSettings, protocolSettings ) {
 		var html = '';
 
 		// Linked device type
@@ -1218,6 +1237,7 @@ var ZiBlueGateway = ( function( api, $ ) {
 		} );
 		html +=	'</select>'
 			+	'<div style="display:none" class="' + _prefix + '-setting-value" data-settings="' + deviceSettings.join(",") + '"></div>'
+			+	'<div style="display:none" class="' + _prefix + '-setting-value" data-features="' + features.join(",") + '"></div>'
 			+ '</div>';
 
 		// Protocol settings
@@ -1272,7 +1292,7 @@ var ZiBlueGateway = ( function( api, $ ) {
 	 *
 	 */
 	function _getEquipmentParams() {
-		var params = { settings: [] };
+		var params = { featureNames: [], settings: [] };
 		$( '#' + _prefix + '-add-equipment-panel .' + _prefix + '-setting-value' ).each( function() {
 			var variableName = $( this ).data( 'variable' );
 			if ( variableName ) {
@@ -1286,8 +1306,11 @@ var ZiBlueGateway = ( function( api, $ ) {
 			if ( settingsName ) {
 				$.extend( params.settings, settingsName.split( "," ) );
 			}
+			var featureNames = $( this ).data( 'features' );
+			if ( featureNames ) {
+				$.extend( params.featureNames, featureNames.split( "," ) );
+			}
 		});
-		params.settings = params.settings.join( "," );
 		if ( !params.protocol ) {
 			api.ui.showMessagePopup( "You have to choose a protocol.", 2, 0 );
 			return false;
@@ -1318,6 +1341,12 @@ var ZiBlueGateway = ( function( api, $ ) {
 						'<div id="' + _prefix + '-add-equipment-panel" class="' + _prefix + '-panel">'
 					+		'<h1>' + Utils.getLangString( _prefix + "_add_new_equipment" ) + '</h1>'
 					+		'<div class="scenes_section_delimiter"></div>'
+					+		'<div class="' + _prefix + '-toolbar">'
+					+			'<button type="button" class="' + _prefix + '-help"><i class="fa fa-question fa-lg text-info" aria-hidden="true"></i>&nbsp;' + Utils.getLangString( _prefix + "_help" ) + '</button>'
+					+		'</div>'
+					+		'<div class="' + _prefix + '-explanation ' + _prefix + '-hidden">'
+					+			Utils.getLangString( _prefix + "_explanation_add_equipment" )
+					+		'</div>'
 					+		'<div id="' + _prefix + '-add-equipment">'
 					+			Utils.getLangString( _prefix + "_loading" )
 					+		'</div>'
@@ -1325,11 +1354,14 @@ var ZiBlueGateway = ( function( api, $ ) {
 				);
 
 				$( "#" + _prefix + "-add-equipment-panel" )
+					.on( "click", "." + _prefix + "-help", function() {
+						$( this ).parent().next( "." + _prefix + "-explanation" ).toggleClass( _prefix + "-hidden" );
+					})
 					.on( "click", "." + _prefix + "-teach", function() {
 						var params = _getEquipmentParams();
 						if ( params ) {
 							var $that = $( this ).addClass( "highlighted" );
-							$.when( _performActionTeachIn( params.protocol, params.equipmentId, params.settings, params.action, params.message ) )
+							$.when( _performActionTeachIn( params.protocol, params.equipmentId, params.settings.join( "," ), params.action, params.message ) )
 								.done( function() { hasTeachingBeenDone = true; } )
 								.then( function() { $that.removeClass( "highlighted" ); } );
 						}
@@ -1338,7 +1370,7 @@ var ZiBlueGateway = ( function( api, $ ) {
 						var params = _getEquipmentParams();
 						if ( params ) {
 							var $that = $( this ).addClass( "highlighted" );
-							$.when( _performActionSetTarget( params.protocol, params.equipmentId, params.settings, "1" ) )
+							$.when( _performActionSetTarget( params.protocol, params.equipmentId, params.settings.join( "," ), "1" ) )
 								.then( function() { $that.removeClass( "highlighted" ); } );
 						}
 					})
@@ -1346,7 +1378,7 @@ var ZiBlueGateway = ( function( api, $ ) {
 						var params = _getEquipmentParams();
 						if ( params ) {
 							var $that = $( this ).addClass( "highlighted" );
-							$.when( _performActionSetTarget( params.protocol, params.equipmentId, params.settings, "0" ) )
+							$.when( _performActionSetTarget( params.protocol, params.equipmentId, params.settings.join( "," ), "0" ) )
 								.then( function() { $that.removeClass( "highlighted" ); } );
 						}
 					})
@@ -1460,7 +1492,7 @@ var ZiBlueGateway = ( function( api, $ ) {
 								if ( modeling.isUsed === false ) {
 									return;
 								}
-								html +=		'<div class="' + _prefix + '-equipment-modeling" data-protocol="' + discoveredEquipment.protocol + '" data-equipment-id="' + discoveredEquipment.id + '" data-endpoint-id="' + capability.endpointId + '" data-address="' + ( capability.address || '' )+ '">'
+								html +=		'<div class="' + _prefix + '-equipment-modeling" data-protocol="' + discoveredEquipment.protocol + '" data-equipment-id="' + discoveredEquipment.id + '" data-endpoint-id="' + ( capability.endpointId || '' ) + '" data-address="' + ( capability.address || '' )+ '">'
 									+			'<div class="' + _prefix + '-modeling-select">'
 									+				'<input type="checkbox">'
 									+			'</div>'
@@ -1476,7 +1508,7 @@ var ZiBlueGateway = ( function( api, $ ) {
 										featureNames.push( featureName );
 										html +=				'<div class="' + _prefix + '-feature">'
 											+					'<span class="' + _prefix + '-feature-name">' + featureName + '</span>'
-											+					( feature.data ? '<span class="' + _prefix + '-feature-data">' + feature.data + ( feature.unit ? feature.unit : '' ) + '</span>' : '' )
+											+					( feature.data ? '<span class="' + _prefix + '-feature-data">' + feature.data + ( feature.unit ? ' ' + feature.unit : '' ) + '</span>' : '' )
 											+				'</div>';
 									});
 									html +=				'</div>'
@@ -1581,7 +1613,16 @@ var ZiBlueGateway = ( function( api, $ ) {
 						if ( mappings.length === 0 ) {
 							api.ui.showMessagePopup( Utils.getLangString( _prefix + "_select_equipment" ), 1 );
 						} else {
-							api.ui.showMessagePopup( Utils.getLangString( _prefix + "_confirmation_learning_equipments" ) + " <pre>" + JSON.stringify( mappings, undefined, 2 ) + "</pre>", 4, 0, {
+							var message = "";
+							$.each( mappings, function( i, mapping ) {
+								message += mapping.protocol + ';' + mapping.equipmentId
+										+	( mapping.address ? ';' + mapping.address : '' )
+										+	( mapping.endpointId ? ';' + mapping.endpointId : '' )
+										+	( mapping.featureNames ? ';' + mapping.featureNames.join(',') : '' )
+										+	';' + mapping.deviceType
+										+	'\n';
+							} );
+							api.ui.showMessagePopup( Utils.getLangString( _prefix + "_confirmation_learning_equipments" ) + " <pre>" + message + "</pre>", 4, 0, {
 								onSuccess: function() {
 									$.when( _performActionCreateDevices( mappings ) )
 										.done( function() {

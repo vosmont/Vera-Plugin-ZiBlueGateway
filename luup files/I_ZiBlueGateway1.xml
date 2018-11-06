@@ -158,7 +158,7 @@
 			<serviceId>urn:upnp-org:serviceId:ZiBlueGateway1</serviceId>
 			<name>SetParam</name>
 			<job>
-				return plugin.Main.startJob( plugin.Main.setParam, lul_settings.paramName, paramValue )
+				return plugin.Main.startJob( plugin.Main.setParam, lul_settings.paramName, lul_settings.paramValue )
 			</job>
 		</action>
 		<action>

@@ -24,7 +24,7 @@ local hasBit, bit = pcall( require , "bit" )
 
 _NAME = "ZiBlueGateway"
 _DESCRIPTION = "ZiBlue gateway for the Vera"
-_VERSION = "1.3"
+_VERSION = "1.3.1"
 _AUTHOR = "vosmont"
 
 -- **************************************************
@@ -267,7 +267,17 @@ local JOB_STATUS = {
 
 -- Equipment types (capabilities)
 local EQUIPMENT = {
-	[ "0" ] = { -- X10 / DOMIA LITE protocol / PARROT
+	[ "PARROT;0" ] = { -- PARROT
+		name = "PARROT",
+		modelings = {
+			{
+				mappings = {
+					{ features = { "state" }, deviceTypes = { "BINARY_LIGHT" }, settings = { "receiver", "transmitter" } }
+				}
+			}
+		}
+	},
+	[ "0" ] = { -- X10 / DOMIA LITE protocol
 		name = "Detector/sensor",
 		modelings = {
 			{
@@ -515,6 +525,7 @@ for _, equipmentInfos in pairs( EQUIPMENT ) do
 	for _, modeling in ipairs( equipmentInfos.modelings ) do
 		modeling.isUsed = false
 		for _, mapping in ipairs( modeling.mappings ) do
+			mapping.isUsed = ( mapping.isUsed == true )
 			local features = {}
 			for _, featureName in ipairs( mapping.features ) do
 				features[ featureName ] = {}
@@ -578,21 +589,10 @@ do --  Equipments commands/actions translation to Vera devices
 			elseif ( state == "toggle" ) then
 				Device.setStatus( deviceId, nil, table_extend( { noAction = true }, params ) )
 			end
-		end,
-		[ "on" ] = function( deviceId )
-			Device.setStatus( deviceId, "1", nil, true )
-		end,
-		[ "off" ] = function( deviceId )
-			Device.setStatus( deviceId, "0", nil, true )
-		end,
-		[ "button/command" ] = function( deviceId )
-			Device.setStatus( deviceId, "1", nil, true )
 		end
 	}
 	DEVICE.DIMMABLE_LIGHT.commands = {
 		[ "state" ] = DEVICE.BINARY_LIGHT.commands["state"],
-		[ "on" ] = DEVICE.BINARY_LIGHT.commands["on"],
-		[ "off" ] = DEVICE.BINARY_LIGHT.commands["off"],
 		[ "dim" ] = function( deviceId, loadLevel )
 			Device.setLoadLevel( deviceId, loadLevel, nil, nil, true )
 		end,
@@ -618,10 +618,7 @@ do --  Equipments commands/actions translation to Vera devices
 	}
 	DEVICE.HUMIDITY_SENSOR.commands = {
 		[ "hygrometry" ] = function( deviceId, humidity )
-			local humidity = tonumber( humidity )
-			if ( humidity and humidity ~= 0 ) then
-				Device.setVariable( deviceId, "HUMIDITY", humidity, "%" )
-			end
+			Device.setVariable( deviceId, "HUMIDITY", humidity, "%" )
 		end
 	}
 	DEVICE.POWER_METER.commands = {
@@ -660,10 +657,13 @@ do --  Equipments commands/actions translation to Vera devices
 		end
 	}
 	DEVICE.PILOT_WIRE.commands = {
+		-- TODO
 	}
 	DEVICE.THERMOSTAT.commands = {
+		-- TODO
 	}
 	DEVICE.HEATER.commands = {
+		-- TODO
 	}
 end
 
@@ -676,42 +676,22 @@ local function _getEquipmentInfos( protocol, infoType, subType, modelId )
 	return equipmentInfos
 end
 
-local ZIBLUE_SEND_PROTOCOL = {
-	VISONIC433 = { name = "Visonic 433Mhz (PowerCode)", deviceSettings = { "receiver" } },
-	VISONIC868 = { name = "Visonic 868Mhz (PowerCode)", deviceSettings = { "receiver" } },
-	CHACON = {
-		name = "Chacon 433Mhz",
-		deviceTypes = { "BINARY_LIGHT", "SHUTTER" },
-		deviceSettings = { "receiver" }
-	},
+-- Virtual equipment types (by protocol)
+local VIRTUAL_EQUIPMENT = {
+	VISONIC433 = { name = "Visonic 433Mhz (PowerCode)" },
+	VISONIC868 = { name = "Visonic 868Mhz (PowerCode)" },
+	CHACON = { name = "Chacon 433Mhz", deviceTypes = { "BINARY_LIGHT", "SHUTTER" } },
 	DOMIA = { name = "Domia 433Mhz" },
-	X10 = {
-		name = "X10 433Mhz",
-		deviceTypes = { "BINARY_LIGHT", "SHUTTER" },
-		deviceSettings = { "receiver" }
-	},
-	X2D433 = { name = "X2D 433Mhz", deviceSettings = { "receiver" } },
-	X2D868 = { name = "X2D 868Mhz", deviceSettings = { "receiver" } },
-	X2DSHUTTER = {
-		name = "X2D Shutter 868Mhz",
-		deviceTypes = { "SHUTTER" },
-		deviceSettings = { "receiver" }
-	},
-	X2DELEC = {
-		name = "X2D Elec 868Mhz",
-		deviceTypes = { "PILOT_WIRE", "HEATER" },
-		deviceSettings = { "receiver" }
-	},
-	X2DGAS = {
-		name = "X2D Gaz 868Mhz",
-		deviceTypes = { "THERMOSTAT" },
-		deviceSettings = { "receiver" }
-	},
+	X10 = { name = "X10 433Mhz", deviceTypes = { "BINARY_LIGHT", "SHUTTER" } },
+	X2D433 = { name = "X2D 433Mhz" },
+	X2D868 = { name = "X2D 868Mhz" },
+	X2DSHUTTER = { name = "X2D Shutter 868Mhz", deviceTypes = { "SHUTTER" } },
+	X2DELEC = { name = "X2D Elec 868Mhz", deviceTypes = { "PILOT_WIRE", "HEATER" } },
+	X2DGAS = { name = "X2D Gaz 868Mhz", deviceTypes = { "THERMOSTAT" } },
 	RTS = {
 		name = "Somfy RTS 433Mhz",
 		deviceTypes = { "SHUTTER;qualifier=0", "SCENE_CONTROLLER;qualifier=1" }, -- TODO Portal
 		-- deviceTypes = { "SHUTTER;qualifier=0", "PORTAL;qualifier=1" },
-		deviceSettings = { "receiver" },
 		protocolSettings = {
 			{ variable = "qualifier", name = "qualifier", type = "string" }
 		}
@@ -726,16 +706,24 @@ local ZIBLUE_SEND_PROTOCOL = {
 			{ variable = "action", name = "action", type = "select", values = { "ON", "OFF" } }
 		}
 	},
-	KD101 = { name = "KD101 433Mhz", deviceSettings = { "receiver" } },
+	KD101 = { name = "KD101 433Mhz" }, -- TODO Alarm with scene or button
 	EDISIO = {
 		name = "Edisio 868Mhz",
 		deviceTypes = { "BINARY_LIGHT", "DIMMABLE_LIGHT" },
-		deviceSettings = { "receiver" },
 		protocolSettings = {
 			{ variable = "qualifier", name = "channel", type = "string" }
 		}
 	}
 }
+for _, virtualEquipmentInfos in pairs( VIRTUAL_EQUIPMENT ) do
+	virtualEquipmentInfos.features = { "virtual" }
+	if not virtualEquipmentInfos.deviceTypes then
+		virtualEquipmentInfos.deviceTypes = { "BINARY_LIGHT" }
+	end
+	if not virtualEquipmentInfos.deviceSettings then
+		virtualEquipmentInfos.deviceSettings = { "receiver" }
+	end
+end
 
 local ZIBLUE_FREQUENCY = {
 	[ "-1" ] = "",
@@ -1304,7 +1292,7 @@ Device = {
 		local params = params or {}
 		local formerStatus = Variable.get( deviceId, "SWITCH_POWER" ) or "0"
 		local equipment, mapping = Equipments.getFromDeviceId( deviceId )
-		local msg = "Equipment '" .. Tools.getEquipmentInfo( equipment, mapping ) .. "'"
+		local msg = "Equipment '" .. Tools.getEquipmentSummary( equipment, mapping ) .. "'"
 		if ( mapping.device.settings.receiver ) then
 			msg = msg .. " (receiver)"
 		elseif ( mapping.device.settings.transmitter ) then
@@ -1696,23 +1684,19 @@ Commands = {
 
 	add = function( protocol, equipmentId, address, endpointId, infos, cmd )
 		cmd.name = string.lower(cmd.name or "")
-		local msg = "Equipment '" .. protocol .. ";" .. tostring(equipmentId)
-		if not string_isEmpty(address) then
-			msg = msg .. ";" .. tostring(address)
-		end
-		msg = msg .. "'"
+		local msg = "Equipment " .. Tools.getEquipmentInfo( protocol, equipmentId, address, endpointId )
 		if string_isEmpty(cmd.name) then
 			error( msg .. " : no given command", "Commands.add" )
 			return false
 		end
-		local equipment, feature, devices = Equipments.get( protocol, equipmentId, address, ( cmd.broadcast ~= true and endpointId ), cmd.name ) -- cmd.name = feature
+		local equipment, feature, devices = Equipments.get( protocol, equipmentId, address, ( cmd.broadcast == true and "all" or endpointId ), cmd.name ) -- cmd.name = feature
 		if equipment then
 			equipment.frequency = infos.frequency
 			equipment.quality = infos.quality
 			if equipment.isNew then
 				-- No command on a new equipment (not yet handled by the home automation controller)
 				debug( msg .. " is new : do nothing", "Commands.add" )
-				return
+				return true
 			end
 			if feature then
 				-- Equipment is known for this feature
@@ -1800,6 +1784,9 @@ local _isMeasureValid = function( measure )
 	if ( ( measure.type == "hygrometry" ) and ( measure.value == "0" ) ) then
 		return false
 	end
+	if ( ( measure.type == "temperature" ) and ( measure.value == "-0.0" ) ) then
+		return false
+	end
 	return true
 end
 
@@ -1825,7 +1812,7 @@ Network = {
 							local filteredSettings = table_filter( SETTINGS.system, function(i, setting) return ( setting.name == "Jamming" ) end )
 							if ( ( #filteredSettings > 0 ) and not Equipments.get( "JAMMING", "0" ) ) then
 								local comment = ( tonumber(filteredSettings[1].value or 0) == 0 ) and "Jamming detection feature is not activated" or ""
-								DiscoveredEquipments.add( "JAMMING", "0", nil, "1", { infoType = "1" }, "state", "1", nil, comment )
+								DiscoveredEquipments.add( "JAMMING", "0", nil, nil, { infoType = "1" }, "state", "1", nil, comment )
 							end
 						elseif data.radioStatus then
 							SETTINGS.radio = Tools.extractInfos( data.radioStatus.band )
@@ -1871,18 +1858,22 @@ Network = {
 			warning( "equipmentId can not be empty", "Network.processFrame" )
 			return true
 		end
+		if ( ( protocol ~= "JAMMING" ) and ( protocol ~= "PARROT" ) and ( tonumber(equipmentId) == 0 ) ) then
+			warning( "equipmentId has to be greater than 0", "Network.processFrame" )
+			return true
+		end
 		local infos = {
 			infoType = frameHeader.infoType,
 			subType = frameInfos.subType,
 			frequency = ( ( frameHeader.dataFlag ~= "-1 " ) and tostring( ZIBLUE_FREQUENCY[ frameHeader.dataFlag ] ) or "" ),
 			quality = tonumber( frameHeader.rfQuality )
 		}
-		local endpointId = "1"
+		local endpointId
 		local isOk = true
 
 		if ( protocol == "EDISIO" ) then
 			equipmentId = string_toHex( number_toBytes( tonumber(equipmentId), "little", false ) )
-			endpointId = frameInfos.qualifier or "1" -- Edisio channel
+			endpointId = string_lpad( frameInfos.qualifier or "01", 2, "0" ) -- Edisio channel
 			debug( "modelId : " .. frameInfos.info, "Network.processFrame" )
 			local info = tonumber(frameInfos.info) or 0
 			infos.modelId = bit.band( info, 0xFF )
@@ -2054,10 +2045,29 @@ Tools = {
 		end
 	end,
 
-	getEquipmentInfo = function( equipment, mapping )
-		local info = equipment.protocol .. ";" .. tostring(equipment.id).. ";" .. tostring(equipment.address)
+	getEquipmentInfo = function( protocol, equipmentId, address, endpointId, featureNames, deviceId )
+		local info = "(protocol:" .. protocol .. "),(id:" .. tostring(equipmentId) ..")"
+		if not string_isEmpty(address) then
+			info = info .. ",(address:" .. tostring(address) .. ")"
+		end
+		if not string_isEmpty(endpointId) then
+			info = info .. ",(endpointId:" .. tostring(endpointId) .. ")"
+		end
+		if ( type(featureNames) == "table" ) then
+			info = info .. ",(features:" .. table.concat( featureNames, "," ) .. ")"
+		end
+		if deviceId then
+			info = info .. ",(deviceId:" .. tostring( deviceId ) .. ")"
+		end
+		return info
+	end,
+
+	getEquipmentSummary = function( equipment, mapping )
+		local info
 		if mapping then
-			info = info .. ";" .. mapping.endpointId .. ";" .. table.concat( table_getKeys( mapping.features ), "," ) .. ";#" .. tostring( mapping.device.id )
+			info = Tools.getEquipmentInfo( equipment.protocol, equipment.id, equipment.address, mapping.endpointId, table_getKeys( mapping.features ), mapping.device.id )
+		else
+			info = Tools.getEquipmentInfo( equipment.protocol, equipment.id, equipment.address )
 		end
 		return info
 	end,
@@ -2116,7 +2126,7 @@ Tools = {
 		--[[
 		if not Equipments.get( "PARROT", status.id ) then
 			-- Add the Parrot device to discovered devices
-			DiscoveredEquipments.add( "PARROT", status.id, nil, "1", { infoType = "0" }, "state", ( ( status.action == "1" ) and "ON" or "OFF" ), nil, status.reminder )
+			DiscoveredEquipments.add( "PARROT", status.id, nil, nil, { infoType = "0" }, "state", ( ( status.action == "1" ) and "ON" or "OFF" ), nil, status.reminder )
 		end
 		--]]
 	end,
@@ -2289,7 +2299,6 @@ DiscoveredEquipments = {
 
 	add = function( protocol, equipmentId, address, endpointId, infos, featureName, data, unit, comment )
 		local hasBeenAdded = false
-		local endpointId = endpointId or "01"
 		if ( string_isEmpty(equipmentId) and string_isEmpty(address) ) then
 			error( "equipmentId or address has to be set", "DiscoveredEquipments.add" )
 			return false
@@ -2318,14 +2327,14 @@ DiscoveredEquipments = {
 				_indexDiscoveredEquipmentsByProtocolAddress[ protocol .. ";" .. address ] = discoveredEquipment
 			end
 			hasBeenAdded = true
-			debug( "New discovered equipment " .. Tools.getEquipmentInfo(discoveredEquipment), "DiscoveredEquipments.add" )
+			debug( "New discovered equipment " .. Tools.getEquipmentSummary(discoveredEquipment), "DiscoveredEquipments.add" )
 		end
 		discoveredEquipment.quality = tonumber( infos.quality )
 
 		-- Capability
 		local isFeatureKnown, hasCapabilityBeenAdded = false, false
 		if infos.capability then
-			local capabilityName = endpointId .. "-" .. ( infos.capability.name or "Unknown" )
+			local capabilityName = ( not string_isEmpty(endpointId) and ( endpointId .. "-" ) or "" ) .. ( infos.capability.name or "Unknown" )
 			local capability = discoveredEquipment.capabilities[ capabilityName ]
 			if ( capability == nil ) then
 				capability = {
@@ -2363,7 +2372,7 @@ DiscoveredEquipments = {
 			UI.show( "New equipment discovered" )
 		end
 		if ( isFeatureKnown and hasCapabilityBeenAdded ) then
-			debug( "Discovered equipment " .. Tools.getEquipmentInfo(discoveredEquipment) .. " has a new feature '" .. featureName .. "'", "DiscoveredEquipments.add" )
+			debug( "Discovered equipment " .. Tools.getEquipmentSummary(discoveredEquipment) .. " has a new feature '" .. featureName .. "'", "DiscoveredEquipments.add" )
 		end
 		return hasBeenAdded, isFeatureKnown
 	end,
@@ -2425,7 +2434,7 @@ Equipments = {
 					-- Address
 					local address = Variable.get( deviceId, "ADDRESS" )
 					-- Endpoint
-					local endpointId = Variable.get( deviceId, "ENDPOINT" ) or "01"
+					local endpointId = Variable.get( deviceId, "ENDPOINT" )
 					-- Features
 					local featureNames = string_split( Variable.get( deviceId, "FEATURE" ) or "default", "," )
 					-- Settings
@@ -2473,10 +2482,9 @@ Equipments = {
 	-- Add a device
 	add = function( protocol, equipmentId, address, endpointId, featureNames, deviceNum, deviceType, deviceId, deviceRoomId, settings, association, isNew )
 		local key = tostring(protocol) .. ";" .. tostring(equipmentId)
-		local endpointId = tostring(endpointId) or "1"
 		local deviceInfos = Device.getInfos( deviceId )
 		local deviceTypeName = deviceInfos and deviceInfos.name or "unknown"
-		debug( "Add equipment '" .. key .. "-" .. tostring(address) .. "-" .. endpointId .. "/" .. tostring(deviceNum) .. "', features " .. json.encode( featureNames or "" ) .. ", device #" .. tostring(deviceId) .. ", type " .. deviceTypeName, "Equipments.add" )
+		debug( "Add equipment " .. Tools.getEquipmentInfo( protocol, equipmentId, address, endpointId, featureNames, deviceId ) .. ",(deviceNum:" .. tostring(deviceNum) .. ",(type:" .. deviceTypeName .. ")", "Equipments.add" )
 		local device = {
 			id = deviceId,
 			settings = settings or {},
@@ -2560,10 +2568,11 @@ Equipments = {
 						_indexFeaturesAndDevicesByProtocolEquipmentIdAndFeatureEndpoint[ key ][ featureName ] = {}
 						_indexFeaturesAndDevicesFromIdAndFeatureByEndpoint = _indexFeaturesAndDevicesByProtocolEquipmentIdAndFeatureEndpoint[ key ][ featureName ]
 					end
-					if ( _indexFeaturesAndDevicesFromIdAndFeatureByEndpoint[ mapping.endpointId ] == nil ) then
-						_indexFeaturesAndDevicesFromIdAndFeatureByEndpoint[ mapping.endpointId ] = { feature, {} }
+					local endpointId = string_isEmpty(mapping.endpointId) and "none" or mapping.endpointId
+					if ( _indexFeaturesAndDevicesFromIdAndFeatureByEndpoint[ endpointId ] == nil ) then
+						_indexFeaturesAndDevicesFromIdAndFeatureByEndpoint[ endpointId ] = { feature, {} }
 					end
-					table.insert( _indexFeaturesAndDevicesFromIdAndFeatureByEndpoint[ mapping.endpointId ][ 2 ], mapping.device )
+					table.insert( _indexFeaturesAndDevicesFromIdAndFeatureByEndpoint[ endpointId ][ 2 ], mapping.device )
 				end
 				_indexEquipmentsAndMappingsByDeviceId[ tostring( mapping.device.id ) ] = { equipment, mapping }
 			end
@@ -2583,15 +2592,16 @@ Equipments = {
 				local _indexFeaturesAndDevicesFromIdAndFeatureByEndpoint = _indexFeaturesAndDevicesByProtocolEquipmentIdAndFeatureEndpoint[ key ][ tostring(featureName) ]
 				if _indexFeaturesAndDevicesFromIdAndFeatureByEndpoint then
 					local feature, devices
-					if endpointId then
-						feature, devices = unpack( _indexFeaturesAndDevicesFromIdAndFeatureByEndpoint[ tostring(endpointId) ] or {} )
-					else
+					if ( endpointId == "all" ) then
 						-- Used during broadcast
 						-- TODO : get all the endpoints and not just the first for this feature name
 						for endpointId, featureAndDevices in pairs(_indexFeaturesAndDevicesFromIdAndFeatureByEndpoint) do
 							feature, devices = unpack( featureAndDevices )
 							break
 						end
+					else
+						endpointId = string_isEmpty(endpointId) and "none" or endpointId
+						feature, devices = unpack( _indexFeaturesAndDevicesFromIdAndFeatureByEndpoint[ endpointId ] or {} )
 					end
 					if ( feature ~= nil ) then
 						return equipment, feature, devices
@@ -2616,7 +2626,7 @@ Equipments = {
 
 	changeAddress = function( equipment, newAddress )
 		local formerAddress = equipment.address
-		debug( "Change address of " .. Tools.getEquipmentInfo(equipment) .. " to " .. tostring(newAddress), "Equipments.changeAddress" )
+		debug( "Change address of " .. Tools.getEquipmentSummary(equipment) .. " to " .. tostring(newAddress), "Equipments.changeAddress" )
 		for _, mapping in ipairs( equipment.mappings ) do
 			Variable.set( mapping.device.id, "ADDRESS", newAddress )
 		end
@@ -2717,7 +2727,7 @@ local REQUEST_TYPE = {
 	end,
 
 	["getProtocolsInfos"] = function( params, outputFormat )
-		return tostring( json.encode( ZIBLUE_SEND_PROTOCOL ) ), "application/json"
+		return tostring( json.encode( VIRTUAL_EQUIPMENT ) ), "application/json"
 	end,
 
 	["getSettings"] = function( params, outputFormat )
@@ -2737,7 +2747,7 @@ setmetatable( REQUEST_TYPE, {
 
 local function _handleRequest( lul_request, lul_parameters, lul_outputformat )
 	local command = lul_parameters["command"] or "default"
-	debug( "Get handler for command '" .. tostring(command) .."'", "handleRequest" )
+	--debug( "Get handler for command '" .. tostring(command) .."'", "handleRequest" )
 	return REQUEST_TYPE[command]( lul_parameters, lul_outputformat )
 end
 
@@ -2836,9 +2846,7 @@ Main = {
 			if ( string_isEmpty( mapping.protocol ) or string_isEmpty( mapping.equipmentId ) or string_isEmpty( mapping.deviceType ) ) then
 				error( "'protocol', 'equipmentId' or 'deviceType' can not be empty in " .. json.encode(mapping), "Main.createDevices" )
 			else
-				mapping.endpointId = tostring(mapping.endpointId) or "1"
-				local key = mapping.protocol .. ";" .. mapping.equipmentId
-				local msg = "Equipment '" .. key .. "-" .. mapping.endpointId .. "'"
+				local msg = "Equipment " .. Tools.getEquipmentInfo( mapping.protocol, mapping.equipmentId, mapping.address, mapping.endpointId, mapping.featureNames )
 				local deviceInfos = Device.getInfos( mapping.deviceType or "BINARY_LIGHT" )
 				if not deviceInfos then
 					error( msg .. " - Device infos are missing", "Main.createDevices" )
@@ -2859,7 +2867,7 @@ Main = {
 					parameters = parameters .. Variable.getEncodedValue( "ADDRESS", mapping.address ) .. "\n"
 					parameters = parameters .. Variable.getEncodedValue( "ENDPOINT", mapping.endpointId ) .. "\n"
 					parameters = parameters .. Variable.getEncodedValue( "FEATURE", table.concat( mapping.featureNames or {}, "," ) ) .. "\n"
-					parameters = parameters .. Variable.getEncodedValue( "ASSOCIATION", "" ) .. "=\n"
+					parameters = parameters .. Variable.getEncodedValue( "ASSOCIATION", "" ) .. "\n"
 					parameters = parameters .. Variable.getEncodedValue( "SETTING", table.concat( mapping.settings or {}, "," ) ) .. "\n"
 					if deviceInfos.category then
 						parameters = parameters .. ",category_num=" .. tostring(deviceInfos.category) .. "\n"
@@ -2873,7 +2881,7 @@ Main = {
 					end
 					--]]
 					-- Add new device in the home automation controller
-					local internalId = key .. ";" .. tostring(deviceNum)
+					local internalId = mapping.protocol .. ";" .. mapping.equipmentId .. ";" .. tostring(deviceNum)
 					debug( msg .. " - Add device '" .. internalId .. "', type '" .. deviceInfos.name .. "', file '" .. deviceInfos.file .. "'", "Main.createDevices" )
 					local newDeviceId = luup.create_device(
 						'', -- device_type
@@ -2899,7 +2907,7 @@ Main = {
 					hasBeenCreated = true
 
 					-- Add or update linked equipment
-					Equipments.add( mapping.protocol, mapping.equipmentId, mapping.address, mapping.endpointId, mapping.featureNames, deviceNum, nil, newDeviceId, roomId, nil, nil, true )
+					Equipments.add( mapping.protocol, mapping.equipmentId, mapping.address, mapping.endpointId, mapping.featureNames or {}, deviceNum, nil, newDeviceId, roomId, nil, nil, true )
 					-- Remove from discovered equipments
 					DiscoveredEquipments.remove( mapping.protocol, mapping.equipmentId )
 				end
@@ -2916,7 +2924,6 @@ Main = {
 	-- Teach a receiver (or Parrot). This is done on an unknown device (it will be created)
 	teachIn = function( protocol, equipmentId, settings, action, comment )
 		equipmentId = tonumber(equipmentId)
-		endpointId = endpointId or "1"
 		if ( ( protocol == nil ) or ( equipmentId == nil ) ) then
 			error( "Protocol and equipment id are mandatory", "Main.teachIn" )
 			return JOB_STATUS.ERROR
@@ -2956,7 +2963,10 @@ Main = {
 
 	setParam = function( paramName, paramValue )
 		debug( "Set param '" .. tostring(paramName) .. "' to '" .. tostring(paramValue) .. "'", "Main.setParam" )
-		-- TODO
+		if ( paramName == "system.jamming" ) then
+			Network.send( "ZIA++JAMMING " .. tostring(paramValue) )
+			Network.send( "ZIA++STATUS SYSTEM JSON" )
+		end
 	end,
 
 	-- Simulate a jamming

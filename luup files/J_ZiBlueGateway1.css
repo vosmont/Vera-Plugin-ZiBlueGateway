@@ -24,7 +24,8 @@ span.ziblue-association span { padding: 1px; }
 .ziblue-association-equipment .ziblue-short-press  { color: white; background: purple; border: 1px solid purple; }
 
 .ziblue-equipment-endpoint {
-	float: left;
+	clear: right;
+	float: right;
 }
 .ziblue-equipment-modeling {
 }
@@ -53,12 +54,13 @@ span.ziblue-association span { padding: 1px; }
 	overflow:auto;
 }
 
-.ziblue-device-type { float: right; }
+.ziblue-device-type { float: left; }
 .ziblue-device-actions {
 	padding: 10px;
 	float: right;
 	cursor: pointer;
 }
+.ziblue-device-settings { font-style: italic; }
 
 
 table.ziblue-feature-group tr { border: 1px solid #ccc; }

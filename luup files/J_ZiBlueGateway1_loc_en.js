@@ -9,6 +9,8 @@ Utils.initTokensWithPrefix( "ziblue", {
 	"learn": "Learn",
 	"cancel": "Cancel",
 	"confirm": "Confirm",
+	"associate": "Associate",
+	"params": "Params",
 	"room": "Room",
 	"protocol": "Protocol",
 	"select_protocol": "Select a protocol",
@@ -40,8 +42,17 @@ Utils.initTokensWithPrefix( "ziblue", {
 	</ul>",
 	"plugin_settings": "ZiBlue Settings",
 
+	// Equipment settings
+	"transmitter": "Transmitter",
+	"receiver": "Receiver",
+	"qualifier": "Qualifier",
+	"reminder": "Reminder",
+	"action": "Action",
+	"channel": "Channel",
+
 	// New equipment
 	"tab_new_equipment": "New equipment",
+	"explanation_add_equipment": "TODO",
 	"add_new_equipment": "Add a new equipment",
 	"add_new_equipment_step": "Step {0}",
 	"add_new_equipment_settings_title": "Settings",
@@ -53,7 +64,8 @@ Utils.initTokensWithPrefix( "ziblue", {
 	"add_new_equipment_validate_title": "Validate",
 	"add_new_equipment_validate_explanation": "If everything is OK, you can validate by creating the new device (virtual emitter).",
 	"warning_teach_in_not_done": "The teaching in of the receiver has not been done. Do you want to continue to create the new device ?",
-	"teach": "Teach",
+	"teach": "Teach in",
+	"clean": "Clean up",
 	"create": "Create",
 	"device_has_been_created": "The device has been created.",
 
@@ -69,12 +81,13 @@ Utils.initTokensWithPrefix( "ziblue", {
 	For example, the activation of a remote control can turn on an outlet managed by the home automation system.",
 	"explanation_param": "This panel displays the parameters (specific to the plugin) of the device associated with an equipment.<br/><br/>\
 	<b>Transmitter:</b> Checked if the device represents a transmitter equipment (e.g. a remote).<br/>\
-	The behavior of the linked device can be adjusted with the parameters \"Pulse\" or \"Toggle\"<br/><br/>\
+	The behavior of the linked device can be adjusted with the parameters \"momentary\" or \"toggle\"<br/><br/>\
 	<b>Receiver:</b> Checked if the device represents a receiver/actuator equipment (e.g. an outlet).<br/>\
-	In this case the device is seen as a virtual transmitter equipment and must be associated with the receiver equipment to be able to control it.<br/>\
+	The device can possibly be seen as a virtual transmitter equipment and must be associated with the receiver equipment to be able to control it.<br/>\
 	Normally this action was done when creating the device from the \"New equipment\" tab, otherwise it can be done from the functions button in the \"Managed equipments\" tab.<br/>\
-	For more information on \"Qualify\" or \"Burst\" parameters, refer to the ZiBlue dongle manual.",
+	For more information on \"qualify\" or \"burst\" parameters, refer to the ZiBlue dongle manual.",
 	"confirmation_teach_in_receiver": "Please put the receiver/actuator equipment in learning mode so that you can associate your virtual equipment with it.",
+	"confirmation_cleaning_receiver": "TODO",
 
 	// Discovered equipments
 	"tab_discovered_equipments": "Discovered equipments",
@@ -88,7 +101,9 @@ Utils.initTokensWithPrefix( "ziblue", {
 	<li>the type of device can sometimes be chosen: this will not change the functionality but its representation in the user interface.</li>\
 	<li>have the system learn this modeling.</li>\
 	</ul>\
-	For example, an equipment measuring temperature and humidity will be associated with 2 devices on the system: a temperature sensor and a humidity sensor.",
+	For example, an equipment measuring temperature and humidity will be associated with 2 devices on the system: a temperature sensor and a humidity sensor.<br\><br\>\
+	Please note that according to the protocol, some receivers do not send their states and therefore cannot be detected and displayed in this tab.<br\>\
+	To be able to control them, you will have to create a virtual transmitter equipment from the \"New Equipment\" tab.",
 	"no_discovered_equipment": "There's no discovered equipment.",
 	"select_equipment": "You have to select the equipment(s) you want to learn.",
 	"confirmation_learning_equipments": "Confirmation for learning the equipments.",
