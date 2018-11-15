@@ -183,7 +183,10 @@
  */
 ( function( $ ) {
 	if ( window.Localization ) {
-		Utils.getLangString = function( token, defaultValue ) { return _T(token) || defaultValue; };
+		Utils.getLangString = function( token, defaultValue ) {
+			var result = _T(token);
+			return ( result === token ? defaultValue || token : result ); 
+		};
 	}
 } ) ( jQuery );
 
@@ -378,7 +381,8 @@ var ZiBlueGateway = ( function( api, $ ) {
 							comment: ""
 						});
 					});
-					html += 	'<div>'
+					html +=		'</div>'
+						+		'<div>'
 						+			'<h3>System</h3>';
 					$.each( settings.system, function( i, setting ) {
 						setting.variable = "system." + setting.variable;
@@ -391,7 +395,8 @@ var ZiBlueGateway = ( function( api, $ ) {
 						setting.comment = ( setting.unit ? setting.unit : '' ) + ( setting.unit && setting.comment ? ' - ' : '' ) + ( setting.comment ? setting.comment : '' )
 						html += _getSettingHtml( setting );
 					});
-					html += 	'<div>'
+					html += 	'</div>'
+						+		'<div>'
 						+			'<h3>Radio High</h3>';
 					$.each( settings.radio[1], function( i, setting ) {
 						setting.variable = "radioHigh." + setting.variable;
@@ -522,7 +527,11 @@ var ZiBlueGateway = ( function( api, $ ) {
 						html += '<tr class="' + _prefix + '-known-equipment">'
 							+		'<td>' + equipment.roomName + '</td>'
 							+		'<td>' + equipment.protocol + '</td>'
-							+		'<td>' + equipment.id + ( equipment.address ? ' (' + equipment.address + ')' : '' ) + ( equipment.isNew ? ' <span style="color:red">NEW</span>' : '' ) + '</td>'
+							+		'<td>'
+							+			equipment.id + ( equipment.address ? ' (' + equipment.address + ')' : '' )
+							+			( equipment.isNew ? ' <span style="color:red">NEW</span>' : '' )
+							+			( equipment.isKnown == false ? ' <span style="color:red">UNKNOWN</span>' : '' )
+							+		'</td>'
 							+		'<td>' + ( equipment.quality >= 0 ? equipment.quality : '' ) + '</td>'
 							+		'<td>'
 /*

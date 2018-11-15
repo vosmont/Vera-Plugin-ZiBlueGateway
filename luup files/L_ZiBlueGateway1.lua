@@ -24,7 +24,7 @@ local hasBit, bit = pcall( require , "bit" )
 
 _NAME = "ZiBlueGateway"
 _DESCRIPTION = "ZiBlue gateway for the Vera"
-_VERSION = "1.3.1"
+_VERSION = "1.3.2"
 _AUTHOR = "vosmont"
 
 -- **************************************************
