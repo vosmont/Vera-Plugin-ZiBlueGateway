@@ -24,7 +24,7 @@ local hasBit, bit = pcall( require , "bit" )
 
 _NAME = "ZiBlueGateway"
 _DESCRIPTION = "ZiBlue gateway for the Vera"
-_VERSION = "1.3.2"
+_VERSION = "1.3.3"
 _AUTHOR = "vosmont"
 
 -- **************************************************
@@ -629,14 +629,16 @@ do --  Equipments commands/actions translation to Vera devices
 			Device.setVariable( deviceId, "WATTS", watts, "W" )
 		end
 	}
-	DEVICE.SHUTTER.commands = { -- TODO
-		[ "on" ] = DEVICE.BINARY_LIGHT.commands["on"],
-		[ "off" ] = DEVICE.BINARY_LIGHT.commands["off"],
-		[ "up/on" ] = DEVICE.BINARY_LIGHT.commands["on"],
-		[ "down/off" ] = DEVICE.BINARY_LIGHT.commands["off"],
+	DEVICE.SHUTTER.commands = {
+		[ "state" ] = DEVICE.BINARY_LIGHT.commands["state"],
+		[ "up/on" ] = function( deviceId )
+			Device.moveShutter( deviceId, "up" )
+		end,
+		[ "down/off" ] = function( deviceId )
+			Device.moveShutter( deviceId, "down" )
+		end,
 		[ "my" ] = function( deviceId )
-			-- TODO : get MY value from settings
-			Device.setLoadLevel( deviceId, "50", nil, nil, true )
+			Device.moveShutter( deviceId, "stop" )
 		end
 	}
 	DEVICE.SCENE_CONTROLLER.commands = {
@@ -691,6 +693,7 @@ local VIRTUAL_EQUIPMENT = {
 	RTS = {
 		name = "Somfy RTS 433Mhz",
 		deviceTypes = { "SHUTTER;qualifier=0", "SCENE_CONTROLLER;qualifier=1" }, -- TODO Portal
+		deviceSettings = { "receiver", "my=50" },
 		-- deviceTypes = { "SHUTTER;qualifier=0", "PORTAL;qualifier=1" },
 		protocolSettings = {
 			{ variable = "qualifier", name = "qualifier", type = "string" }
@@ -1596,20 +1599,23 @@ Device = {
 	end,
 
 	-- Manage roller shutter
-	moveShutter = function( deviceId, direction, noAction )
+	moveShutter = function( deviceId, direction, params )
+		local params = params or {}
 		debug( "Shutter #" .. tostring(deviceId) .. " direction: " .. tostring(direction), "Device.moveShutter" )
 		if ( direction == "up" ) then
-			return Device.setStatus( deviceId, "1", nil, noAction )
+			return Device.setStatus( deviceId, "1", nil, params )
 		elseif ( direction == "down" ) then
-			return Device.setStatus( deviceId, "0", nil, noAction )
+			return Device.setStatus( deviceId, "0", nil, params )
 		elseif ( direction == "stop" ) then
 			-- TODO : problème avec sens ?
-			local equipment = Equipments.getFromDeviceId( deviceId )
+			local equipment, mapping = Equipments.getFromDeviceId( deviceId )
 			if ( equipment.protocol == "RTS" ) then
 				-- "My" fonction for RTS
-				if ( feature.settings.receiver and not ( noAction == true ) ) then
+				if ( mapping.device.settings.receiver and not ( params.noAction == true ) ) then
 					debug( "RTS 'My' function", "Device.moveShutter" )
-					local burst = feature.settings.burst and ( " BURST " .. feature.settings.burst ) or ""
+					local loadLevel = mapping.device.settings.my or "50"
+					Device.setLoadLevel( deviceId, loadLevel, { noAction = true } )
+					local burst = mapping.device.settings.burst and ( " BURST " .. mapping.device.settings.burst ) or ""
 					Network.send( "ZIA++DIM RTS ID " .. equipment.id .. " %4 QUALIFIER 0" .. burst )
 				end
 			else
@@ -2162,10 +2168,11 @@ Tools = {
 -- **************************************************
 
 Association = {
-	-- Get association from string
-	get = function( strAssociation )
+	-- Get association of a device
+	get = function( deviceId )
 		local association = {}
-		for _, encodedAssociation in pairs( string_split( strAssociation or "", "," ) ) do
+		local encodedAssociations = string_split( Variable.get( deviceId, "ASSOCIATION" ) or "", "," )
+		for _, encodedAssociation in pairs( encodedAssociations ) do
 			local linkedId, level, isScene, isEquipment = nil, 1, false, false
 			while ( encodedAssociation ) do
 				local firstCar = string.sub( encodedAssociation, 1 , 1 )
@@ -2188,31 +2195,31 @@ Association = {
 			end
 			if linkedId then
 				if isScene then
-					if ( luup.scenes[ linkedId ] ) then
+					if luup.scenes[ linkedId ] then
 						if ( association.scenes == nil ) then
 							association.scenes = { {}, {} }
 						end
 						table.insert( association.scenes[ level ], linkedId )
 					else
-						error( "Associated scene #" .. tostring( linkedId ) .. " is unknown", "Association.get" )
+						error( "Associated scene #" .. tostring( linkedId ) .. " is unknown for device #" .. tostring(deviceId), "Association.get" )
 					end
 				elseif isEquipment then
-					if ( luup.devices[ linkedId ] ) then
+					if luup.devices[ linkedId ] then
 						if ( association.equipments == nil ) then
 							association.equipments = { {}, {} }
 						end
 						table.insert( association.equipments[ level ], linkedId )
 					else
-						error( "Associated equipment #" .. tostring( linkedId ) .. " is unknown", "Association.get" )
+						error( "Associated equipment #" .. tostring( linkedId ) .. " is unknown for device #" .. tostring(deviceId), "Association.get" )
 					end
 				else
-					if ( luup.devices[ linkedId ] ) then
+					if luup.devices[ linkedId ] then
 						if ( association.devices == nil ) then
 							association.devices = { {}, {} }
 						end
 						table.insert( association.devices[ level ], linkedId )
 					else
-						error( "Associated device #" .. tostring( linkedId ) .. " is unknown", "Association.get" )
+						error( "Associated device #" .. tostring( linkedId ) .. " is unknown for device #" .. tostring(deviceId), "Association.get" )
 					end
 				end
 			end
@@ -2445,7 +2452,7 @@ Equipments = {
 						settings.button = nil
 					end
 					-- Association
-					association = Association.get( Variable.get( deviceId, "ASSOCIATION" ) )
+					association = Association.get( deviceId )
 					-- Add the device
 					Equipments.add( protocol, equipmentId, address, endpointId, featureNames, deviceNum, luDevice.device_type, deviceId, luDevice.room_num, settings, association, false )
 				end
@@ -2653,9 +2660,18 @@ Equipment = {
 	end,
 
 	setLoadLevel = function( equipment, loadLevel, parameters )
+		local loadLevel = tonumber(loadLevel) or 0
 		if ( equipment.protocol == "RTS" ) then
-			error( "RTS equipment does not support DIM", "Equipment.setLoadLevel" )
-			return false
+			if ( loadLevel == 0 ) then
+				Equipment.setStatus( equipment, "0", parameters )
+				return true
+			elseif ( loadLevel == 100 ) then
+				Equipment.setStatus( equipment, "1", parameters )
+				return true
+			else
+				error( "RTS equipment does not support DIM", "Equipment.setLoadLevel" )
+				return false
+			end
 		end
 		parameters = parameters or {}
 		local qualifier = parameters.qualifier and ( " QUALIFIER " .. ( ( parameters.qualifier == "1" ) and "1" or "0" ) ) or ""

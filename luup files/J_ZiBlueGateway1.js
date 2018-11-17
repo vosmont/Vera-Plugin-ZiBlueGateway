@@ -42,7 +42,7 @@
 						|| !$.isPlainObject( result[ "u:" + action + "Response" ] )
 						|| (
 							( result[ "u:" + action + "Response" ].OK !== "OK" )
-							&& ( typeof( result[ "u:" + action + "Response" ].JobID ) === "undefined" )
+							&& ( result[ "u:" + action + "Response" ].JobID === undefined )
 						)
 					) {
 						Utils.logError( "[Utils.performActionOnDevice] ERROR on action '" + action + "': " + response.responseText );
@@ -252,7 +252,7 @@ var ZiBlueGateway = ( function( api, $ ) {
 	 * Convert timestamp to locale string
 	 */
 	function _convertTimestampToLocaleString( timestamp ) {
-		if ( typeof( timestamp ) === "undefined" ) {
+		if ( timestamp === undefined ) {
 			return "";
 		}
 		var t = new Date( parseInt( timestamp, 10 ) * 1000 );
@@ -307,8 +307,8 @@ var ZiBlueGateway = ( function( api, $ ) {
 			} );
 			html +=	'</select>';
 		} else {
-			var value = ( setting.value ? setting.value : ( setting.defaultValue ? setting.defaultValue : '' ) );
-			html +=	'<input type="text" value="' + value + '" class="' + className + '" data-setting="' + setting.variable  + '">';
+			var value = ( ( setting.value !== undefined ) ? setting.value : ( setting.defaultValue ? setting.defaultValue : '' ) );
+			html +=	'<input type="text" value="' + value + '" class="' + className + '" data-setting="' + setting.variable  + '"' + ( setting.isReadOnly ? ' readonly' : '' ) + '>';
 		}
 		if ( setting.action == "SetParam" ) {
 			html +=	'<button type="button" class="' + _prefix + '-set-param" data-name="' + setting.variable  + '">Set</button>'
@@ -675,45 +675,43 @@ var ZiBlueGateway = ( function( api, $ ) {
 			if ( luDevice.id == mapping.device.id ) {
 				return;
 			}
-			// Check if device is an equipment with same protocol
-			var isEquipment = false;
+			// Check if the device is linked to an equipment with same protocol
+			var protocol = "";
+			var isEquipmentWithSameProtocol = false;
 			if ( luDevice.id_parent === _deviceId ) {
 				var index = _indexMappings[ luDevice.id.toString() ];
-				if ( index && ( index[0].protocol == equipment.protocol ) ) {
-					isEquipment = true;
+				if ( index ) {
+					protocol = index[0].protocol;
+					if ( protocol == equipment.protocol ) {
+						isEquipmentWithSameProtocol = true;
+					}
 				}
 			}
-			// Check if device is compatible
+			// Check if the device is compatible
 			var isCompatible = false;
 			for ( var j = 0; j < luDevice.states.length; j++ ) {
 				if ( ( luDevice.states[j].service === SWP_SID ) || ( luDevice.states[j].service === SWD_SID ) ) {
-					// Device can be switched or dimmed
+					// The device can be switched or dimmed
 					isCompatible = true;
 					break;
 				}
 			}
-			if ( !isEquipment && !isCompatible ) {
+			if ( !isEquipmentWithSameProtocol && !isCompatible ) {
 				return;
 			}
 			
 			var room = ( luDevice.room ? api.getRoomObject( luDevice.room ) : null );
-			if ( isEquipment ) {
-				devices.push( {
-					"id": luDevice.id,
-					"roomName": ( room ? room.name : "_No room" ),
-					"name": "(" + _prefix + ") " + luDevice.name,
-					"type": 3,
-					"isEquipment": isEquipment
-				} );
-			} else {
-				devices.push( {
-					"id": luDevice.id,
-					"roomName": ( room ? room.name : "_No room" ),
-					"name": luDevice.name,
-					"type": 2,
-					"isEquipment": isEquipment
-				} );
+			var device = {
+				"id": luDevice.id,
+				"roomName": ( room ? room.name : "_No room" ),
+				"name": ( protocol ? "(" + protocol + ") " : "" ) + luDevice.name
 			}
+			if ( isEquipmentWithSameProtocol ) {
+				device.type = 3;
+			} else {
+				device.type = 2;
+			}
+			devices.push( device );
 		} );
 		// Get scenes
 		$.each( jsonp.ud.scenes, function( i, scene ) {
@@ -829,7 +827,7 @@ var ZiBlueGateway = ( function( api, $ ) {
 					associations.push( "*" + sceneId );
 				}
 			});
-			// Device linked to an equipment
+			// Device linked to an equipment (declaration)
 			$("#" + _prefix + "-equipments-association ." + _prefix + "-association-equipment input:checked").each( function() {
 				var deviceId = $( this ).parents( "." + _prefix + "-association-equipment" ).data( "device-id" );
 				associations.push( "%" + deviceId );
@@ -854,8 +852,8 @@ var ZiBlueGateway = ( function( api, $ ) {
 	function _showEquipmentParams( equipment, mapping ) {
 		_stopEquipmentsRefresh();
 		var settings = mapping.device.settings;
+		var luDevice = api.getDeviceObject( mapping.device.id );
 		var html = '<h1>' + Utils.getLangString( _prefix + "_param" ) + '</h1>'
-				+	'<h3>' + equipment.protocol + ' - ' + equipment.id + " - " + Object.keys( mapping.features ).join( "," ) + ' (#' + mapping.device.id + ')</h3>'
 				+	'<div class="scenes_section_delimiter"></div>'
 				+	'<div class="' + _prefix + '-toolbar">'
 				+		'<button type="button" class="' + _prefix + '-help"><i class="fa fa-question fa-lg text-info" aria-hidden="true"></i>&nbsp;' + Utils.getLangString( _prefix + "_help" ) + '</button>'
@@ -863,6 +861,28 @@ var ZiBlueGateway = ( function( api, $ ) {
 				+	'<div class="' + _prefix + '-explanation ' + _prefix + '-hidden">'
 				+		Utils.getLangString( _prefix + "_explanation_param" )
 				+	'</div>';
+
+		// Equipment
+		html += '<h3>'
+			+			'<div class="' + _prefix + '-setting ui-widget-content ui-corner-all">'
+			+				Utils.getLangString( _prefix + "_equipment" )
+			+			'</div>'
+			+		'</h3>'
+			+		_getSettingHtml({ type: "string", isReadOnly: true, name: "protocol", value: equipment.protocol })
+			+		_getSettingHtml({ type: "string", isReadOnly: true, name: "id", value: equipment.id })
+			+		( equipment.address ? _getSettingHtml({ type: "string", isReadOnly: true, name: "address", value: equipment.address }) : '' )
+			+	'</div>';
+			
+		// Linked device
+		html += '<h3>'
+			+			'<div class="' + _prefix + '-setting ui-widget-content ui-corner-all">'
+			+				Utils.getLangString( _prefix + "_device" )
+			+			'</div>'
+			+		'</h3>'
+			+		( mapping.endpointId ? _getSettingHtml({ type: "string", isReadOnly: true, name: "endpoint", value: mapping.endpointId }) : '' )
+			+		_getSettingHtml({ type: "string", isReadOnly: true, name: "device", value: ( luDevice.name + ' (#' + mapping.device.id + ')' ) })
+			+		_getSettingHtml({ type: "string", isReadOnly: true, name: "feature", value: Object.keys( mapping.features ).join( "," ) })
+			+	'</div>';
 
 		// Transmitter
 		html += '<h3>'
@@ -1190,7 +1210,7 @@ var ZiBlueGateway = ( function( api, $ ) {
 				$( "#" +_prefix + "-setting-protocol" ).change( function() {
 					var protocolName = $(this).val();
 					var protocolInfos = protocolsInfos[ protocolName ];
-					if ( typeof protocolInfos != "undefined") {
+					if ( protocolInfos !== undefined ) {
 						_drawProtocolSettings( protocolInfos.features || [], protocolInfos.deviceTypes || [], protocolInfos.deviceSettings || [], protocolInfos.protocolSettings || {} );
 					}
 					_drawProtocolValidation( protocolName );
@@ -1225,7 +1245,7 @@ var ZiBlueGateway = ( function( api, $ ) {
 
 		// Linked device type
 		var deviceTypeParams = {};
-		if ( ( deviceTypes == undefined ) || ( deviceTypes.length === 0 ) ) {
+		if ( ( deviceTypes === undefined ) || ( deviceTypes.length === 0 ) ) {
 			deviceTypes = [ "BINARY_LIGHT" ];
 		}
 		html +=	'<div class="' + _prefix + '-setting ui-widget-content ui-corner-all">'
@@ -1313,11 +1333,11 @@ var ZiBlueGateway = ( function( api, $ ) {
 			}
 			var settingsName = $( this ).data( 'settings' );
 			if ( settingsName ) {
-				$.extend( params.settings, settingsName.split( "," ) );
+				$.merge( params.settings, settingsName.split( "," ) );
 			}
 			var featureNames = $( this ).data( 'features' );
 			if ( featureNames ) {
-				$.extend( params.featureNames, featureNames.split( "," ) );
+				$.merge( params.featureNames, featureNames.split( "," ) );
 			}
 		});
 		if ( !params.protocol ) {
