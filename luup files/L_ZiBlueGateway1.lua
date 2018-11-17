@@ -24,7 +24,7 @@ local hasBit, bit = pcall( require , "bit" )
 
 _NAME = "ZiBlueGateway"
 _DESCRIPTION = "ZiBlue gateway for the Vera"
-_VERSION = "1.3.3"
+_VERSION = "1.3.4"
 _AUTHOR = "vosmont"
 
 -- **************************************************
@@ -90,12 +90,12 @@ local VARIABLE = {
 	LIGHT_LEVEL = { "urn:micasaverde-com:serviceId:LightSensor1", "CurrentLevel", true },
 	PRESSURE = { "urn:upnp-org:serviceId:BarometerSensor1", "CurrentPressure", true },
 	FORECAST = { "urn:upnp-org:serviceId:BarometerSensor1", "Forecast", true },
-	WIND_DIRECTION = { "urn:micasaverde-com:serviceId:WindSensor1", "Direction", true },
-	WIND_GUST_SPEED = { "urn:micasaverde-com:serviceId:WindSensor1", "GustSpeed", true },
-	WIND_AVERAGE_SPEED = { "urn:micasaverde-com:serviceId:WindSensor1", "AvgSpeed", true },
+	WIND_DIRECTION = { "urn:upnp-org:serviceId:WindSensor1", "Direction", true },
+	WIND_GUST_SPEED = { "urn:upnp-org:serviceId:WindSensor1", "GustSpeed", true },
+	WIND_AVERAGE_SPEED = { "urn:upnp-org:serviceId:WindSensor1", "AvgSpeed", true },
 	RAIN_TOTAL = { "urn:upnp-org:serviceId:RainSensor1", "CurrentTRain", true },
 	RAIN = { "urn:upnp-org:serviceId:RainSensor1", "CurrentRain", true },
-	UV_LEVEL = { "urn:micasaverde-com:serviceId:UvSensor1", "CurrentLevel", true },
+	UV_LEVEL = { "urn:upnp-org:serviceId:UvSensor1", "CurrentLevel", true },
 	-- Switches
 	SWITCH_POWER = { "urn:upnp-org:serviceId:SwitchPower1", "Status", true },
 	DIMMER_LEVEL = { "urn:upnp-org:serviceId:Dimming1", "LoadLevelStatus", true },
