@@ -24,7 +24,7 @@ local hasBit, bit = pcall( require , "bit" )
 
 _NAME = "ZiBlueGateway"
 _DESCRIPTION = "ZiBlue gateway for the Vera"
-_VERSION = "1.3.4"
+_VERSION = "1.3.5"
 _AUTHOR = "vosmont"
 
 -- **************************************************
@@ -2148,13 +2148,18 @@ Tools = {
 	getSettings = function( encodedSettings )
 		local settings = {}
 		for _, encodedSetting in ipairs( string_split( encodedSettings or "", "," ) ) do
-			local settingName, value = string.match( encodedSetting, "([^=]*)=?(.*)" )
+			local settingName, operator, value = string.match( encodedSetting, "([^=]*)(=?)(.*)" )
 			if not string_isEmpty( settingName ) then
 				-- Backward compatibility
 				if ( settingName == "pulse" ) then
 					settingName = "momentary"
 				end
-				settings[ settingName ] = not string_isEmpty( value ) and ( tonumber(value) or value ) or true
+				if ( operator == "=" ) then
+					value = tonumber(value) or value or ""
+				else
+					value = true
+				end
+				settings[ settingName ] = value
 			end
 		end
 		return settings

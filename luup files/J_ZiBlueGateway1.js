@@ -285,15 +285,16 @@ var ZiBlueGateway = ( function( api, $ ) {
 	function _getSettingHtml( setting ) {
 		var className = _prefix + "-setting-value" + ( setting.className ? " " + setting.className : "" );
 		var settingName = setting.name || setting.variable;
+		var settingVariable = setting.variable || '';
 		var html = '<div class="' + _prefix + '-setting ui-widget-content ui-corner-all">'
 			+			'<span>' + Utils.getLangString( _prefix + "_" + settingName, settingName ) + '</span>';
 		if ( setting.type == "checkbox" ) {
 			html += '<input type="checkbox"'
 				+		( ( setting.value === true ) ? ' checked="checked"' : '' )
 				+		( ( setting.isReadOnly === true ) ? ' disabled="disabled"' : '' )
-				+		' class="' + className + '" data-setting="' + setting.variable  + '">';
+				+		' class="' + className + '" data-setting="' + settingVariable + '">';
 		} else if ( setting.type == "select" ) {
-			html +=	'<select class="' + className + '" data-setting="' + setting.variable + '">';
+			html +=	'<select class="' + className + '" data-setting="' + settingVariable + '">';
 			$.each( setting.values, function( i, value ) {
 				var isSelected = false;
 				if ( typeof setting.value === "string" ) {
@@ -308,10 +309,10 @@ var ZiBlueGateway = ( function( api, $ ) {
 			html +=	'</select>';
 		} else {
 			var value = ( ( setting.value !== undefined ) ? setting.value : ( setting.defaultValue ? setting.defaultValue : '' ) );
-			html +=	'<input type="text" value="' + value + '" class="' + className + '" data-setting="' + setting.variable  + '"' + ( setting.isReadOnly ? ' readonly' : '' ) + '>';
+			html +=	'<input type="text" value="' + value + '" class="' + className + '" data-setting="' + settingVariable + '"' + ( setting.isReadOnly ? ' readonly' : '' ) + '>';
 		}
 		if ( setting.action == "SetParam" ) {
-			html +=	'<button type="button" class="' + _prefix + '-set-param" data-name="' + setting.variable  + '">Set</button>'
+			html +=	'<button type="button" class="' + _prefix + '-set-param" data-name="' + settingVariable + '">Set</button>'
 		}
 		if ( setting.comment ) {
 			html +=	'<span class="' + _prefix + '-setting-comment">' + setting.comment + '</span>';
@@ -936,7 +937,6 @@ var ZiBlueGateway = ( function( api, $ ) {
 			if ( $.inArray( paramName, [ 'transmitter', 'toggle', 'momentary', "timeForLongPress", 'timeout', 'receiver', 'qualifier', 'burst' ] ) === -1 ) {
 				specificHtml += _getSettingHtml({
 					type: ( ( typeof paramValue == "boolean" ) ? "checkbox" : "string" ),
-					isReadOnly: true,
 					variable: paramName,
 					value: paramValue
 				});
@@ -988,7 +988,8 @@ var ZiBlueGateway = ( function( api, $ ) {
 		$( "#" + _prefix + "-equipments-params ." + _prefix + "-setting-value:visible" ).each( function() {
 			var settingName = $( this ).data( "setting" );
 			var settingValue = $( this ).is( ":checkbox" ) ? $( this ).is( ":checked" ) : $( this ).val();
-			if ( settingName && ( settingValue !== "" ) ) {
+			//if ( settingName && ( settingValue !== "" ) ) {
+			if ( settingName ) {
 				device.settings[ settingName ] = settingValue;
 			}
 		});
@@ -1515,6 +1516,7 @@ var ZiBlueGateway = ( function( api, $ ) {
 							html +=		'<div class="' + _prefix + '-equipment-capability">'
 								+			'<div class="' + _prefix + '-capability-name">'
 								+				capability.name
+								+				( capability.data ? '<span class="' + _prefix + '-feature-data">' + capability.data + '</span>' : '' )
 								+			'</div>';
 
 							$.each( capability.modelings, function( k, modeling ) {
