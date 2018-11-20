@@ -24,7 +24,7 @@ local hasBit, bit = pcall( require , "bit" )
 
 _NAME = "ZiBlueGateway"
 _DESCRIPTION = "ZiBlue gateway for the Vera"
-_VERSION = "1.3.5"
+_VERSION = "1.3.6"
 _AUTHOR = "vosmont"
 
 -- **************************************************
@@ -734,6 +734,73 @@ local ZIBLUE_FREQUENCY = {
 	[ "1" ] = "868"
 }
 
+local ZIBLUE_SETTINGS = {
+	[ "system.jamming" ] = {
+		action = "SetParam",
+		variable = "jamming",
+		["type"] = "select",
+		values = {
+			{ "0", "OFF" },
+			{ "1", "1 - Most sensitive on a single frequency" },
+			{ "2", "2" },
+			{ "3", "3" },
+			{ "4", "4" },
+			{ "5", "5" },
+			{ "6", "6 - Most sensitive on two frequencies" },
+			{ "7", "7 - Default" },
+			{ "8", "8" },
+			{ "9", "9" },
+			{ "10", "10 - Least sensitive" }
+		}
+	},
+	[ "radio.0.frequency" ] = {
+		action = "SetParam",
+		variable = "frequency",
+		["type"] = "select",
+		values = {
+			{ "0", "OFF" },
+			{ "433420", "433.420 Mhz" }, -- Default
+			{ "433920", "433.920 Mhz" }
+		}
+	},
+	[ "radio.0.selectivity" ] = {
+		action = "SetParam",
+		variable = "selectivity",
+		["type"] = "select",
+		values = {
+			{ "0", "Medium selectivity (300Khz)" }, -- Default
+			{ "1", "Very low selectivity (800Khz), frequency centered between (433420-433920)" },
+			{ "2", "Very low selectivity (800Khz)" },
+			{ "3", "Low selectivity (500Khz)" },
+			{ "4", "Medium selectivity (300Khz)" },
+			{ "5", "High selectivity (200Khz)" }
+		}
+	},
+	[ "radio.1.frequency" ] = {
+		action = "SetParam",
+		variable = "frequency",
+		["type"] = "select",
+		values = {
+			{ "0", "OFF" },
+			{ "868950", "868.950 Mhz" }, -- Default
+			{ "868350", "868.350 Mhz" }
+		}
+	},
+	[ "radio.1.selectivity" ] = {
+		action = "SetParam",
+		variable = "selectivity",
+		["type"] = "select",
+		values = {
+			{ "0", "Medium selectivity (300Khz)" }, -- Default
+			{ "1", "Very low selectivity (800Khz), frequency centered between (868350-868950)" },
+			{ "2", "Very low selectivity (800Khz)" },
+			{ "3", "Low selectivity (500Khz)" },
+			{ "4", "Medium selectivity (300Khz)" },
+			{ "5", "High selectivity (200Khz)" }
+		}
+	}
+}
+
 local ZIBLUE_SEND_ACTION = {
 	OFF             = 0,
 	ON              = 1,
@@ -1295,11 +1362,12 @@ Device = {
 		local params = params or {}
 		local formerStatus = Variable.get( deviceId, "SWITCH_POWER" ) or "0"
 		local equipment, mapping = Equipments.getFromDeviceId( deviceId )
-		local msg = "Equipment '" .. Tools.getEquipmentSummary( equipment, mapping ) .. "'"
-		if ( mapping.device.settings.receiver ) then
-			msg = msg .. " (receiver)"
-		elseif ( mapping.device.settings.transmitter ) then
-			msg = msg .. " (transmitter)"
+		local msg = "Equipment " .. Tools.getEquipmentSummary( equipment, mapping )
+		if mapping.device.settings.receiver then
+			msg = msg .. ",(receiver)"
+		end
+		if mapping.device.settings.transmitter then
+			msg = msg .. ",(transmitter)"
 		end
 
 		-- Momentary
@@ -1412,7 +1480,7 @@ Device = {
 		if ( ( timeout > 0 ) and ( Variable.get( deviceId, VARIABLE.SWITCH_POWER ) == "1" ) ) then 
 			local elapsedTime = os.difftime( os.time(), Variable.getTimestamp( deviceId, VARIABLE.SWITCH_POWER ) or 0 )
 			if ( elapsedTime >= timeout ) then
-				Device.setStatus( deviceId, "0", { isAfterTimeout = true } )
+				Device.setStatus( deviceId, "0", { noAction = true, isAfterTimeout = true } )
 			end
 		end
 	end,
@@ -1699,6 +1767,10 @@ Commands = {
 		if equipment then
 			equipment.frequency = infos.frequency
 			equipment.quality = infos.quality
+			if string_isEmpty(equipmentId) then
+				equipmentId = equipment.id
+				msg = "Equipment " .. Tools.getEquipmentInfo( protocol, equipmentId, address, endpointId )
+			end
 			if equipment.isNew then
 				-- No command on a new equipment (not yet handled by the home automation controller)
 				debug( msg .. " is new : do nothing", "Commands.add" )
@@ -1723,14 +1795,17 @@ Commands = {
 
 		if ( not cmd.broadcast and ( cmd.name ~= "battery" ) and ( not equipment or not feature ) ) then
 			-- Add this equipment or feature to the discovered equipments (but not yet known)
-			local hasBeenAdded, isFeatureKnown = DiscoveredEquipments.add( protocol, equipmentId, address, endpointId, infos, cmd.name, cmd.data, cmd.unit )
+			msg = msg .. ",(command:" .. cmd.name .. ")"
+			local hasBeenAdded, hasCapabilityBeenAdded, isFeatureKnown = DiscoveredEquipments.add( protocol, equipmentId, address, endpointId, infos, cmd.name, cmd.data, cmd.unit )
 			if hasBeenAdded then
-				debug( msg .. " is unknown for command '" .. cmd.name .. "'", "Commands.add" )
+				debug( msg .. " was unknown", "Commands.add" )
+			elseif hasCapabilityBeenAdded then
+				debug( msg .. " was unknown for this command", "Commands.add" )
 			elseif not isFeatureKnown then
 				error( msg .. ": feature '" .. cmd.name .. "' is not known", "Commands.add" )
 				return false
 			else
-				debug( msg .. " is already discovered for command '" .. cmd.name .. "'", "Commands.add" )
+				debug( msg .. " is already discovered", "Commands.add" )
 			end
 		end
 		return true
@@ -1811,9 +1886,9 @@ Network = {
 					-- JSON
 					local decodeSuccess, data, _, jsonError = pcall( json.decode, data )
 					if ( decodeSuccess and data ) then
-						debug( source .. " " .. qualifier .. ": " .. json.encode( data ), "Network.receive" )
+						debug( "<-- " .. source .. " " .. qualifier .. ": " .. json.encode( data ), "Network.receive" )
 						if data.systemStatus then
-							SETTINGS.system = Tools.extractInfos( data.systemStatus.info )
+							SETTINGS.system = Tools.extractInfos( data.systemStatus.info, "system" )
 							-- Special feature : JAMMING
 							local filteredSettings = table_filter( SETTINGS.system, function(i, setting) return ( setting.name == "Jamming" ) end )
 							if ( ( #filteredSettings > 0 ) and not Equipments.get( "JAMMING", "0" ) ) then
@@ -1821,7 +1896,7 @@ Network = {
 								DiscoveredEquipments.add( "JAMMING", "0", nil, nil, { infoType = "1" }, "state", "1", nil, comment )
 							end
 						elseif data.radioStatus then
-							SETTINGS.radio = Tools.extractInfos( data.radioStatus.band )
+							SETTINGS.radio = Tools.extractInfos( data.radioStatus.band, "radio" )
 						elseif data.parrotStatus then
 							Tools.updateParrotStatus( data.parrotStatus.info )
 						elseif not Network.processFrame( source, qualifier, data ) then
@@ -1989,7 +2064,7 @@ Network = {
 				return
 			else
 				--debug( "Send message: ".. string.formatToHex(_messageToSendQueue[1]), "Network.send" )
-				debug( "Send message: " .. message, "Network.send" )
+				debug( "--> " .. message, "Network.send" )
 				_lastNetworkSendTime = os.time()
 				if not luup.io.write( message ) then
 					error( "Failed to send packet", "Network.send" )
@@ -2078,8 +2153,9 @@ Tools = {
 		return info
 	end,
 
-	extractInfos = function( infos )
+	extractInfos = function( infos, path )
 		local result = {}
+		local path = path or ""
 		for _, info in ipairs( infos ) do
 			if not string_isEmpty( info.n ) then
 				local item = {
@@ -2093,15 +2169,12 @@ Tools = {
 					item.comment = info.c
 				end
 				table.insert( result, item )
-				if ( item.name == "Jamming" ) then
-					item.action = "SetParam"
-					item.variable = "jamming"
-					item.type = "select"
-					item.values = { "0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10" }
-					item.comment = "(0=OFF, 1=most sensitive -> 10=least sensitive)"
+				local infoPath = path .. "." .. string.lower( tostring(item.name) )
+				if ZIBLUE_SETTINGS[infoPath] then
+					table_extend( item, ZIBLUE_SETTINGS[infoPath] )
 				end
 			elseif info.i then
-				table.insert( result, Tools.extractInfos( info.i ) )
+				table.insert( result, Tools.extractInfos( info.i, path .. "." .. tostring(#result) ) )
 			elseif info.p then
 				table.insert( result, info.p )
 			elseif info.transmitter then
@@ -2358,23 +2431,27 @@ DiscoveredEquipments = {
 				hasCapabilityBeenAdded = true
 			end
 
-			-- Feature
-			for _, modeling in ipairs( capability.modelings ) do
-				for _, mapping in ipairs( modeling.mappings ) do
-					local feature = mapping.features[ featureName ]
-					if feature then
-						-- This mapping contains our feature
-						isFeatureKnown = true
-						if mapping.deviceTypes then
-							mapping.isUsed = true
-							feature.data = data
-							feature.unit = unit
-							modeling.isUsed = true
+			if ( #capability.modelings > 0 ) then
+				-- Feature
+				for _, modeling in ipairs( capability.modelings ) do
+					for _, mapping in ipairs( modeling.mappings ) do
+						local feature = mapping.features[ featureName ]
+						if feature then
+							-- This mapping contains our feature
+							isFeatureKnown = true
+							if mapping.deviceTypes then
+								mapping.isUsed = true
+								feature.data = data
+								feature.unit = unit
+								modeling.isUsed = true
+							end
+							-- The features are unique in each modeling
+							break
 						end
-						-- The features are unique in each modeling
-						break
 					end
 				end
+			else
+				capability.data = data
 			end
 		end
 
@@ -2386,7 +2463,7 @@ DiscoveredEquipments = {
 		if ( isFeatureKnown and hasCapabilityBeenAdded ) then
 			debug( "Discovered equipment " .. Tools.getEquipmentSummary(discoveredEquipment) .. " has a new feature '" .. featureName .. "'", "DiscoveredEquipments.add" )
 		end
-		return hasBeenAdded, isFeatureKnown
+		return hasBeenAdded, hasCapabilityBeenAdded, isFeatureKnown
 	end,
 
 	get = function( protocol, equipmentId )
@@ -2399,7 +2476,7 @@ DiscoveredEquipments = {
 	end,
 
 	remove = function( protocol, equipmentId )
-		if ( ( protocol ~= nil ) and ( equipmentId ~= nil ) ) then
+		if ( not string_isEmpty(protocol) and not string_isEmpty(equipmentId) ) then
 			local key = protocol .. ";" .. equipmentId
 			local discoveredEquipment = _indexDiscoveredEquipmentsByProtocolEquipmentId[ key ]
 			for i, equipment in ipairs( _discoveredEquipments ) do
@@ -2639,8 +2716,11 @@ Equipments = {
 	changeAddress = function( equipment, newAddress )
 		local formerAddress = equipment.address
 		debug( "Change address of " .. Tools.getEquipmentSummary(equipment) .. " to " .. tostring(newAddress), "Equipments.changeAddress" )
+		equipment.address = tostring(newAddress)
+		_indexEquipmentsByProtocolAddress[ equipment.protocol .. ";" .. formerAddress ] = nil
+		_indexEquipmentsByProtocolAddress[ equipment.protocol .. ";" .. equipment.address ] = equipment
 		for _, mapping in ipairs( equipment.mappings ) do
-			Variable.set( mapping.device.id, "ADDRESS", newAddress )
+			Variable.set( mapping.device.id, "ADDRESS", equipment.address )
 		end
 	end
 }
@@ -2984,8 +3064,22 @@ Main = {
 
 	setParam = function( paramName, paramValue )
 		debug( "Set param '" .. tostring(paramName) .. "' to '" .. tostring(paramValue) .. "'", "Main.setParam" )
+		local hasBeenSet = true
 		if ( paramName == "system.jamming" ) then
 			Network.send( "ZIA++JAMMING " .. tostring(paramValue) )
+		elseif ( paramName == "radiolow.frequency" ) then
+			Network.send( "ZIA++FREQ L " .. tostring(paramValue) )
+		elseif ( paramName == "radiolow.selectivity" ) then
+			Network.send( "ZIA++SELECTIVITY L " .. tostring(paramValue) )
+		elseif ( paramName == "radiohigh.frequency" ) then
+			Network.send( "ZIA++FREQ H " .. tostring(paramValue) )
+		elseif ( paramName == "radiohigh.selectivity" ) then
+			Network.send( "ZIA++SELECTIVITY H " .. tostring(paramValue) )
+		else
+			hasBeenSet = false
+		end
+		if hasBeenSet then
+			Network.send( "WAIT" )
 			Network.send( "ZIA++STATUS SYSTEM JSON" )
 		end
 	end,

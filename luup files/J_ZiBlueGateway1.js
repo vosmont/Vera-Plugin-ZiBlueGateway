@@ -287,7 +287,7 @@ var ZiBlueGateway = ( function( api, $ ) {
 		var settingName = setting.name || setting.variable;
 		var settingVariable = setting.variable || '';
 		var html = '<div class="' + _prefix + '-setting ui-widget-content ui-corner-all">'
-			+			'<span>' + Utils.getLangString( _prefix + "_" + settingName, settingName ) + '</span>';
+			+			'<span class="' + _prefix + '-setting-name">' + Utils.getLangString( _prefix + "_" + settingName, settingName ) + '</span>';
 		if ( setting.type == "checkbox" ) {
 			html += '<input type="checkbox"'
 				+		( ( setting.value === true ) ? ' checked="checked"' : '' )
@@ -295,8 +295,10 @@ var ZiBlueGateway = ( function( api, $ ) {
 				+		' class="' + className + '" data-setting="' + settingVariable + '">';
 		} else if ( setting.type == "select" ) {
 			html +=	'<select class="' + className + '" data-setting="' + settingVariable + '">';
-			$.each( setting.values, function( i, value ) {
+			$.each( setting.values, function( i, item ) {
 				var isSelected = false;
+				var value = item[0];
+				var label = item[1];
 				if ( typeof setting.value === "string" ) {
 					if ( value === setting.value ) {
 						isSelected = true;
@@ -304,7 +306,7 @@ var ZiBlueGateway = ( function( api, $ ) {
 				} else if ( i === 0 ) {
 					isSelected = true;
 				}
-				html +=	'<option value="' + value + '"' + ( isSelected ? ' selected' : '' ) + '>' + value + '</option>';
+				html +=	'<option value="' + value + '"' + ( isSelected ? ' selected' : '' ) + '>' + label + '</option>';
 			} );
 			html +=	'</select>';
 		} else {
@@ -392,7 +394,7 @@ var ZiBlueGateway = ( function( api, $ ) {
 					html += 	'<div>'
 						+			'<h3>Radio Low</h3>';
 					$.each( settings.radio[0], function( i, setting ) {
-						setting.variable = "radioLow." + setting.variable;
+						setting.variable = "radiolow." + setting.name.toLowerCase();
 						setting.comment = ( setting.unit ? setting.unit : '' ) + ( setting.unit && setting.comment ? ' - ' : '' ) + ( setting.comment ? setting.comment : '' )
 						html += _getSettingHtml( setting );
 					});
@@ -400,7 +402,7 @@ var ZiBlueGateway = ( function( api, $ ) {
 						+		'<div>'
 						+			'<h3>Radio High</h3>';
 					$.each( settings.radio[1], function( i, setting ) {
-						setting.variable = "radioHigh." + setting.variable;
+						setting.variable = "radiohigh." + setting.name.toLowerCase();
 						setting.comment = ( setting.unit ? setting.unit : '' ) + ( setting.unit && setting.comment ? ' - ' : '' ) + ( setting.comment ? setting.comment : '' )
 						html += _getSettingHtml( setting );
 					});

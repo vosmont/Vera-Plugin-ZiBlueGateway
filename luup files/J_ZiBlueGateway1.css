@@ -100,8 +100,10 @@ table.ziblue-feature-group td { padding: 5px; }
 
 .ziblue-feature-group td { border: 0 }
 .ziblue-setting { margin-top: 10px; border-radius: 25px; padding: 1px 25px; text-align: left; }
-.ziblue-setting span { display: inline-block; width: 30%; }
+.ziblue-setting span { display: inline-block; }
+.ziblue-setting-name { width: 30%; }
 .ziblue-setting-comment { margin-left: 5px; }
+.ziblue-setting input, .ziblue-setting select { width: 30%; }
 h3 div.ui-widget-content {
 	color: #fff !important; background-color: #00a652 !important;
 }
