@@ -23,7 +23,10 @@ span.ziblue-association span { padding: 1px; }
 .ziblue-association-scene .ziblue-long-press   { color: white; background: green; border: 1px solid green; }
 .ziblue-association-equipment .ziblue-short-press  { color: white; background: purple; border: 1px solid purple; }
 
-
+.ziblue-equipment-endpoint {
+	clear: right;
+	float: right;
+}
 .ziblue-equipment-modeling {
 }
 .ziblue-modeling-select {
@@ -51,30 +54,27 @@ span.ziblue-association span { padding: 1px; }
 	overflow:auto;
 }
 
-.ziblue-device-type { float: right; }
+.ziblue-device-type { float: left; }
 .ziblue-device-actions {
 	padding: 10px;
 	float: right;
 	cursor: pointer;
 }
+.ziblue-device-settings { font-style: italic; }
 
 
-.ziblue-short-press {}
 table.ziblue-feature-group tr { border: 1px solid #ccc; }
 table.ziblue-feature-group td { padding: 5px; }
+.ziblue-short-press {}
 .ziblue-long-press { border: red; }
 
 .ziblue-protocol-name { font-weight: bold; }
 .ziblue-protocol-id { font-weight: bold; }
 .ziblue-device-name { font-weight: bold; }
 
-.ziblue-features {
-	color: #fff;
-	background: #00a652;
-	padding: 2px;
-}
+.ziblue-features { color: #fff;	background: #00a652; padding: 2px; }
 .ziblue-feature-name { font-weight: bold; font-style: italic; }
-.ziblue-feature-state { font-style: italic; margin-left: 5px; }
+.ziblue-feature-data { font-style: italic; margin-left: 5px; }
 
 
 #ziblue-equipments-actions {
@@ -83,6 +83,7 @@ table.ziblue-feature-group td { padding: 5px; }
 }
 #ziblue-equipments-actions td { padding: 5px; }
 #ziblue-equipments-actions button { margin: 2px; }
+
 #ziblue-equipments-association {
 	position: absolute; top: 0px; left: 0px;
 	width: 100%;
@@ -99,8 +100,10 @@ table.ziblue-feature-group td { padding: 5px; }
 
 .ziblue-feature-group td { border: 0 }
 .ziblue-setting { margin-top: 10px; border-radius: 25px; padding: 1px 25px; text-align: left; }
-.ziblue-setting span { display: inline-block; width: 30%; }
+.ziblue-setting span { display: inline-block; }
+.ziblue-setting-name { width: 30%; }
 .ziblue-setting-comment { margin-left: 5px; }
+.ziblue-setting input, .ziblue-setting select { width: 30%; }
 h3 div.ui-widget-content {
 	color: #fff !important; background-color: #00a652 !important;
 }

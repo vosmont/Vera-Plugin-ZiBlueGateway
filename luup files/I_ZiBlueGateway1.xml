@@ -33,7 +33,7 @@
 			<serviceId>urn:micasaverde-com:serviceId:SecuritySensor1</serviceId>
 			<name>SetArmed</name>
 			<job>
-				return plugin.Child.setArmed( lul_device, lul_settings.newArmedValue )
+				return plugin.Main.startJob( plugin.Child.doAction, "setArmed", lul_device, lul_settings.newArmedValue )
 			</job>
 		</action>
 		<!-- SwitchPower -->
@@ -41,7 +41,7 @@
 			<serviceId>urn:upnp-org:serviceId:SwitchPower1</serviceId>
 			<name>SetTarget</name>
 			<job>
-				return plugin.Child.setTarget( lul_device, lul_settings.newTargetValue )
+				return plugin.Main.startJob( plugin.Child.doAction, "setStatus", lul_device, lul_settings.newTargetValue )
 			</job>
 		</action>
 		<!-- Dimming -->
@@ -49,7 +49,7 @@
 			<serviceId>urn:upnp-org:serviceId:Dimming1</serviceId>
 			<name>SetLoadLevelTarget</name>
 			<job>
-				return plugin.Child.setLoadLevelTarget( lul_device, lul_settings.newLoadlevelTarget )
+				return plugin.Main.startJob( plugin.Child.doAction, "setLoadLevel", lul_device, lul_settings.newLoadlevelTarget )
 			</job>
 		</action>
 		<!-- WindowCovering -->
@@ -57,58 +57,57 @@
 			<serviceId>urn:upnp-org:serviceId:WindowCovering1</serviceId>
 			<name>Up</name>
 			<job>
-				return plugin.Child.moveShutter( lul_device, "up" )
+				return plugin.Main.startJob( plugin.Child.doAction, "moveShutter", lul_device, "up" )
 			</job>
 		</action>
 		<action>
 			<serviceId>urn:upnp-org:serviceId:WindowCovering1</serviceId>
 			<name>Down</name>
 			<job>
-				return plugin.Child.moveShutter( lul_device, "down" )
+				return plugin.Main.startJob( plugin.Child.doAction, "moveShutter", lul_device, "down" )
 			</job>
 		</action>
 		<action>
 			<serviceId>urn:upnp-org:serviceId:WindowCovering1</serviceId>
 			<name>Stop</name>
 			<job>
-				return plugin.Child.moveShutter( lul_device, "stop" )
+				return plugin.Main.startJob( plugin.Child.doAction, "moveShutter", lul_device, "stop" )
 			</job>
 		</action>
 		<!-- HVAC -->
 		<action>
+			<serviceId>urn:upnp-org:serviceId:HVAC_FanOperatingMode1</serviceId>
+			<name>SetMode</name>
+			<job>
+				return plugin.Main.startJob( plugin.Child.doAction, "setHVACFanOperatingMode", lul_device, lul_settings.NewMode )
+			</job>
+		</action>
+		<action>
 			<serviceId>urn:upnp-org:serviceId:HVAC_UserOperatingMode1</serviceId>
 			<name>SetModeTarget</name>
 			<job>
-				return plugin.Child.setModeStatus( lul_device, lul_settings.NewMode or lul_settings.NewModeTarget )
+				return plugin.Main.startJob( plugin.Child.doAction, "setHVACOperatingMode", lul_device, ( lul_settings.NewMode or lul_settings.NewModeTarget ) )
 			</job>
 		</action>
 		<action>
 			<serviceId>urn:upnp-org:serviceId:TemperatureSetpoint1</serviceId>
 			<name>SetCurrentSetpoint</name>
 			<job>
-				return plugin.Child.setSetPoint( lul_device, lul_settings.NewCurrentSetpoint )
+				return plugin.Main.startJob( plugin.Child.doAction, "setSetPoint", lul_device, lul_settings.NewCurrentSetpoint )
 			</job>
 		</action>
 		<action>
 			<serviceId>urn:upnp-org:serviceId:TemperatureSetpoint1_Heat</serviceId>
 			<name>SetCurrentSetpoint</name>
 			<job>
-				return plugin.Child.setSetPoint( lul_device, lul_settings.NewCurrentSetpoint, "Heat" )
+				return plugin.Main.startJob( plugin.Child.doAction, "setSetPoint", lul_device, lul_settings.NewCurrentSetpoint, "Heat" )
 			</job>
 		</action>
 		<action>
 			<serviceId>urn:upnp-org:serviceId:TemperatureSetpoint1_Cool</serviceId>
 			<name>SetCurrentSetpoint</name>
 			<job>
-				return plugin.Child.setSetPoint( lul_device, lul_settings.NewCurrentSetpoint, "Cool" )
-			</job>
-		</action>
-		<!-- PilotWire -->
-		<action>
-			<serviceId>urn:antor-fr:serviceId:PilotWire1</serviceId>
-			<name>SetTarget</name>
-			<job>
-				return plugin.Child.setModeStatus( lul_device, lul_settings.newTargetValue, "PilotWire" )
+				return plugin.Main.startJob( plugin.Child.doAction, "setSetPoint", lul_device, lul_settings.NewCurrentSetpoint, "Cool" )
 			</job>
 		</action>
 		<!-- ZiBlue gateway -->
@@ -137,14 +136,28 @@
 			<serviceId>urn:upnp-org:serviceId:ZiBlueGateway1</serviceId>
 			<name>TeachIn</name>
 			<run>
-				return plugin.Main.startJob( plugin.Main.teachIn, lul_settings.productId, lul_settings.action, lul_settings.comment )
+				return plugin.Main.startJob( plugin.Main.teachIn, lul_settings.protocol, lul_settings.equipmentId, lul_settings.settings, lul_settings.action, lul_settings.comment )
+			</run>
+		</action>
+		<action>
+			<serviceId>urn:upnp-org:serviceId:ZiBlueGateway1</serviceId>
+			<name>Clear</name>
+			<run>
+				return plugin.Main.startJob( plugin.Main.clear, lul_settings.protocol, lul_settings.equipmentId, lul_settings.settings )
 			</run>
 		</action>
 		<action>
 			<serviceId>urn:upnp-org:serviceId:ZiBlueGateway1</serviceId>
 			<name>SetTarget</name>
 			<job>
-				return plugin.Main.startJob( plugin.Main.setTarget, lul_settings.productId, lul_settings.newTargetValue )
+				return plugin.Main.startJob( plugin.Main.setTarget, lul_settings.protocol, lul_settings.equipmentId, lul_settings.settings, lul_settings.newTargetValue )
+			</job>
+		</action>
+		<action>
+			<serviceId>urn:upnp-org:serviceId:ZiBlueGateway1</serviceId>
+			<name>SetParam</name>
+			<job>
+				return plugin.Main.startJob( plugin.Main.setParam, lul_settings.paramName, lul_settings.paramValue )
 			</job>
 		</action>
 		<action>

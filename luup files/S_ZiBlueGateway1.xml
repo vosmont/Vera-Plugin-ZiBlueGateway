@@ -57,7 +57,17 @@
 			<name>TeachIn</name>
 			<argumentList>
 				<argument>
-					<name>productId</name>
+					<name>protocol</name>
+					<direction>in</direction>
+					<relatedStateVariable>A_ARG_TYPE_STRING</relatedStateVariable>
+				</argument>
+				<argument>
+					<name>equipmentId</name>
+					<direction>in</direction>
+					<relatedStateVariable>A_ARG_TYPE_STRING</relatedStateVariable>
+				</argument>
+				<argument>
+					<name>settings</name>
 					<direction>in</direction>
 					<relatedStateVariable>A_ARG_TYPE_STRING</relatedStateVariable>
 				</argument>
@@ -77,7 +87,17 @@
 			<name>Clear</name>
 			<argumentList>
 				<argument>
-					<name>productId</name>
+					<name>protocol</name>
+					<direction>in</direction>
+					<relatedStateVariable>A_ARG_TYPE_STRING</relatedStateVariable>
+				</argument>
+				<argument>
+					<name>equipmentId</name>
+					<direction>in</direction>
+					<relatedStateVariable>A_ARG_TYPE_STRING</relatedStateVariable>
+				</argument>
+				<argument>
+					<name>settings</name>
 					<direction>in</direction>
 					<relatedStateVariable>A_ARG_TYPE_STRING</relatedStateVariable>
 				</argument>
@@ -87,7 +107,17 @@
 			<name>SetTarget</name>
 			<argumentList>
 				<argument>
-					<name>productId</name>
+					<name>protocol</name>
+					<direction>in</direction>
+					<relatedStateVariable>A_ARG_TYPE_STRING</relatedStateVariable>
+				</argument>
+				<argument>
+					<name>equipmentId</name>
+					<direction>in</direction>
+					<relatedStateVariable>A_ARG_TYPE_STRING</relatedStateVariable>
+				</argument>
+				<argument>
+					<name>settings</name>
 					<direction>in</direction>
 					<relatedStateVariable>A_ARG_TYPE_STRING</relatedStateVariable>
 				</argument>
@@ -95,6 +125,21 @@
 					<name>newTargetValue</name>
 					<direction>in</direction>
 					<relatedStateVariable>A_ARG_TYPE_BOOLEAN</relatedStateVariable>
+				</argument>
+			</argumentList>
+		</action>
+		<action>
+			<name>SetParam</name>
+			<argumentList>
+				<argument>
+					<name>paramName</name>
+					<direction>in</direction>
+					<relatedStateVariable>A_ARG_TYPE_STRING</relatedStateVariable>
+				</argument>
+				<argument>
+					<name>paramValue</name>
+					<direction>in</direction>
+					<relatedStateVariable>A_ARG_TYPE_STRING</relatedStateVariable>
 				</argument>
 			</argumentList>
 		</action>

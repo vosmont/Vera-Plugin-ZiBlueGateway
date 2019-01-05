@@ -1,5 +1,5 @@
 {
-	"default_icon": "http://vosmont.github.io/icons/ziblue_gateway.png",
+	"default_icon": "https://vosmont.github.io/icons/ziblue_gateway.png",
 	"x": 2,
 	"y": 4,
 	"inScene": 1,
@@ -205,20 +205,6 @@
 					"defaultValue": "1"
 				}
 			]
-		},
-		{
-			"id": 2,
-			"label": {
-				"lang_tag": "ui7_sensor_tampered",
-				"text": "Whenever _DEVICE_NAME_ is being tampered with"
-			},
-			"serviceId": "urn:micasaverde-com:serviceId:HaDevice1",
-			"serviceStateTable": {
-				"sl_TamperAlarm": {
-					"value": "1",
-					"comparisson": "="
-				}
-			}
 		}
 	],
 	"device_type": "urn:schemas-upnp-org:device:ZiBlueGateway:1"

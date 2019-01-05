@@ -12,6 +12,7 @@ module( "L_ZiBlueGateway1", package.seeall )
 
 -- Load libraries
 local hasJson, json = pcall( require, "dkjson" )
+local hasBit, bit = pcall( require , "bit" )
 
 
 --https://apps.mios.com/plugin.php?id=1648
@@ -23,7 +24,7 @@ local hasJson, json = pcall( require, "dkjson" )
 
 _NAME = "ZiBlueGateway"
 _DESCRIPTION = "ZiBlue gateway for the Vera"
-_VERSION = "1.2.1"
+_VERSION = "1.3.7"
 _AUTHOR = "vosmont"
 
 -- **************************************************
@@ -58,11 +59,11 @@ local function warning( msg, methodName )
 	log( msg, methodName, 2 )
 end
 
-local g_errors = {}
+local _errors = {}
 local function error( msg, methodName, notifyOnUI )
-	table.insert( g_errors, { os.time(), methodName or "", tostring( msg ) } )
-	if ( #g_errors > 100 ) then
-		table.remove( g_errors, 1 )
+	table.insert( _errors, { os.time(), methodName or "", tostring( msg ) } )
+	if ( #_errors > 100 ) then
+		table.remove( _errors, 1 )
 	end
 	log( msg, methodName, 1 )
 	if ( notifyOnUI ~= false ) then
@@ -80,7 +81,8 @@ end
 -- 1) the service ID
 -- 2) the variable name
 -- 3) true if the variable is not updated when the value is unchanged
--- 4) variable that is used for the timestamp
+-- 4) variable that is used for the timestamp, for active value
+-- 5) variable that is used for the timestamp, for inactive value
 local VARIABLE = {
 	-- Sensors
 	TEMPERATURE = { "urn:upnp-org:serviceId:TemperatureSensor1", "CurrentTemperature", true },
@@ -88,26 +90,28 @@ local VARIABLE = {
 	LIGHT_LEVEL = { "urn:micasaverde-com:serviceId:LightSensor1", "CurrentLevel", true },
 	PRESSURE = { "urn:upnp-org:serviceId:BarometerSensor1", "CurrentPressure", true },
 	FORECAST = { "urn:upnp-org:serviceId:BarometerSensor1", "Forecast", true },
-	WIND_DIRECTION = { "urn:micasaverde-com:serviceId:WindSensor1", "Direction", true },
-	WIND_GUST_SPEED = { "urn:micasaverde-com:serviceId:WindSensor1", "GustSpeed", true },
-	WIND_AVERAGE_SPEED = { "urn:micasaverde-com:serviceId:WindSensor1", "AvgSpeed", true },
-	RAIN = { "urn:upnp-org:serviceId:RainSensor1", "CurrentTRain", true },
-	RAIN_RATE = { "urn:upnp-org:serviceId:RainSensor1", "CurrentRain", true }, -- TODO ??
-	UV = { "urn:micasaverde-com:serviceId:UvSensor1", "CurrentLevel", true },
+	WIND_DIRECTION = { "urn:upnp-org:serviceId:WindSensor1", "Direction", true },
+	WIND_GUST_SPEED = { "urn:upnp-org:serviceId:WindSensor1", "GustSpeed", true },
+	WIND_AVERAGE_SPEED = { "urn:upnp-org:serviceId:WindSensor1", "AvgSpeed", true },
+	RAIN_TOTAL = { "urn:upnp-org:serviceId:RainSensor1", "CurrentTRain", true },
+	RAIN = { "urn:upnp-org:serviceId:RainSensor1", "CurrentRain", true },
+	UV_LEVEL = { "urn:upnp-org:serviceId:UvSensor1", "CurrentLevel", true },
 	-- Switches
 	SWITCH_POWER = { "urn:upnp-org:serviceId:SwitchPower1", "Status", true },
 	DIMMER_LEVEL = { "urn:upnp-org:serviceId:Dimming1", "LoadLevelStatus", true },
+	DIMMER_LEVEL_TARGET = { "urn:upnp-org:serviceId:Dimming1", "LoadLevelTarget", true },
 	DIMMER_LEVEL_OLD = { "urn:upnp-org:serviceId:ZiBlueDevice1", "LoadLevelStatus", true },
 	DIMMER_DIRECTION = { "urn:upnp-org:serviceId:ZiBlueDevice1", "LoadLevelDirection", true },
 	DIMMER_STEP = { "urn:upnp-org:serviceId:ZiBlueDevice1", "DimmingStep", true },
 	-- Scene controller
 	LAST_SCENE_ID = { "urn:micasaverde-com:serviceId:SceneController1", "LastSceneID", true, "LAST_SCENE_DATE" },
-	LAST_SCENE_DATE = { "urn:micasaverde-com:serviceId:SceneController1", "LastSceneTime", false },
+	LAST_SCENE_DATE = { "urn:micasaverde-com:serviceId:SceneController1", "LastSceneTime", true },
 	-- Security
 	ARMED = { "urn:micasaverde-com:serviceId:SecuritySensor1", "Armed", true },
-	TRIPPED = { "urn:micasaverde-com:serviceId:SecuritySensor1", "Tripped", false, "LAST_TRIP" },
-	ARMED_TRIPPED = { "urn:micasaverde-com:serviceId:SecuritySensor1", "ArmedTripped", false, "LAST_TRIP" },
+	TRIPPED = { "urn:micasaverde-com:serviceId:SecuritySensor1", "Tripped", true, "LAST_TRIP", "LAST_UNTRIP" },
+	ARMED_TRIPPED = { "urn:micasaverde-com:serviceId:SecuritySensor1", "ArmedTripped", true, "LAST_TRIP" },
 	LAST_TRIP = { "urn:micasaverde-com:serviceId:SecuritySensor1", "LastTrip", true },
+	LAST_UNTRIP = { "urn:micasaverde-com:serviceId:SecuritySensor1", "LastTrip", true },
 	TAMPER_ALARM = { "urn:micasaverde-com:serviceId:HaDevice1", "sl_TamperAlarm", false, "LAST_TAMPER" },
 	LAST_TAMPER = { "urn:micasaverde-com:serviceId:SecuritySensor1", "LastTamper", true },
 	-- Battery
@@ -118,14 +122,14 @@ local VARIABLE = {
 	KWH = { "urn:micasaverde-com:serviceId:EnergyMetering1", "KWH", true, "KWH_DATE" },
 	KWH_DATE = { "urn:micasaverde-com:serviceId:EnergyMetering1", "KWHReading", true },
 	-- HVAC
-	HVAC_MODE_STATE = { "urn:micasaverde-com:serviceId:HVAC_OperatingState1", "ModeState", true },
-	HVAC_MODE_STATUS = { "urn:upnp-org:serviceId:HVAC_UserOperatingMode1", "ModeStatus", true },
+	HVAC_OPERATING_STATE = { "urn:micasaverde-com:serviceId:HVAC_OperatingState1", "ModeState", true },
+	HVAC_OPERATING_MODE = { "urn:upnp-org:serviceId:HVAC_UserOperatingMode1", "ModeStatus", true },
+	HVAC_FAN_OPERATING_MODE = { "urn:upnp-org:serviceId:HVAC_FanOperatingMode1", "Mode", true },
 	HVAC_CURRENT_SETPOINT = { "urn:upnp-org:serviceId:TemperatureSetpoint1", "CurrentSetpoint", true },
 	HVAC_CURRENT_SETPOINT_HEAT = { "urn:upnp-org:serviceId:TemperatureSetpoint1_Heat", "CurrentSetpoint", true },
 	HVAC_CURRENT_SETPOINT_COOL = { "urn:upnp-org:serviceId:TemperatureSetpoint1_Cool", "CurrentSetpoint", true },
 	-- Pilot Wire (Antor)
 	PILOTWIRE_STATUS = { "urn:antor-fr:serviceId:PilotWire1", "Status", true },
-	PILOTWIRE_TARGET = { "urn:antor-fr:serviceId:PilotWire1", "Target", true },
 	-- IO connection
 	IO_DEVICE = { "urn:micasaverde-com:serviceId:HaDevice1", "IODevice", true },
 	IO_PORT_PATH = { "urn:micasaverde-com:serviceId:HaDevice1", "IOPortPath", true },
@@ -138,14 +142,20 @@ local VARIABLE = {
 	COMM_FAILURE_TIME = { "urn:micasaverde-com:serviceId:HaDevice1", "CommFailureTime", true },
 	-- ZiBlue gateway
 	PLUGIN_VERSION = { "urn:upnp-org:serviceId:ZiBlueGateway1", "PluginVersion", true },
+	MAC_ADDRESS = { "urn:upnp-org:serviceId:ZiBlueGateway1", "MacAdress", true },
 	DEBUG_MODE = { "urn:upnp-org:serviceId:ZiBlueGateway1", "DebugMode", true },
 	LAST_DISCOVERED = { "urn:upnp-org:serviceId:ZiBlueGateway1", "LastDiscovered", true },
 	LAST_UPDATE = { "urn:upnp-org:serviceId:ZiBlueGateway1", "LastUpdate", true },
 	LAST_MESSAGE = { "urn:upnp-org:serviceId:ZiBlueGateway1", "LastMessage", true },
 	-- Equipment
+	ADDRESS = { "urn:upnp-org:serviceId:ZiBlueDevice1", "Address", true },
+	ENDPOINT = { "urn:upnp-org:serviceId:ZiBlueDevice1", "Endpoint", true },
 	FEATURE = { "urn:upnp-org:serviceId:ZiBlueDevice1", "Feature", true },
 	ASSOCIATION = { "urn:upnp-org:serviceId:ZiBlueDevice1", "Association", true },
-	SETTING = { "urn:upnp-org:serviceId:ZiBlueDevice1", "Setting", true }
+	SETTING = { "urn:upnp-org:serviceId:ZiBlueDevice1", "Setting", true },
+	CAPABILITIES = { "urn:upnp-org:serviceId:ZiBlueDevice1", "Capabilities", true },
+	LAST_INFO = { "urn:upnp-org:serviceId:ZiBlueDevice1", "LastInfo", true },
+	NEXT_SCHEDULE = { "urn:upnp-org:serviceId:ZiBlueDevice1", "NextSchedule", true }
 }
 
 -- Device types
@@ -182,7 +192,11 @@ local DEVICE = {
 	},
 	UV_SENSOR = {
 		type = "urn:schemas-micasaverde-com:device:UvSensor:1", file = "D_UvSensor.xml",
-		parameters = { { "UV", "0" } }
+		parameters = { { "UV_LEVEL", "0" } }
+	},
+	RAIN_METER = {
+		type = "urn:schemas-micasaverde-com:device:RainSensor:1", file = "D_RainSensor1.xml",
+		parameters = { { "RAIN", "0" }, { "RAIN_TOTAL", "0" } }
 	},
 	BINARY_LIGHT = {
 		type = "urn:schemas-upnp-org:device:BinaryLight:1", file = "D_BinaryLight1.xml",
@@ -208,21 +222,27 @@ local DEVICE = {
 		type = "urn:schemas-micasaverde-com:device:WindowCovering:1", file = "D_WindowCovering1.xml",
 		parameters = { { "DIMMER_LEVEL", "0" } }
 	},
-	PILOT_WIRE = {
-		type = "urn:antor-fr:device:PilotWire:1", file = "D_PilotWire1.xml",
-		parameters = { { "PILOTWIRE_STATUS", "0" } }
-	},
 	THERMOSTAT = {
 		type = "urn:schemas-upnp-org:device:HVAC_ZoneThermostat:1", file = "D_HVAC_ZoneThermostat1.xml",
 		parameters = {
-			{ "SWITCH_POWER", "0" }, { "HVAC_MODE_STATE", "Idle" }, { "HVAC_MODE_STATUS", "Off" },
+			{ "SWITCH_POWER", "0" }, { "HVAC_OPERATING_STATE", "Idle" }, { "HVAC_OPERATING_MODE", "Off" },
 			{ "HVAC_CURRENT_SETPOINT", "15" }, { "HVAC_CURRENT_SETPOINT_HEAT", "15" }, { "HVAC_CURRENT_SETPOINT_COOL", "15" }
+		}
+	},
+	PILOT_WIRE = {
+		type = "urn:schemas-upnp-org:device:HVAC_ZoneThermostat:1", file = "D_HVAC_ZoneThermostat1.xml",
+		json = "D_QubinoFlushPilotWire1.json",
+		category = 5, subCategory = 1,
+		parameters = {
+			{ "SWITCH_POWER", "0" }, { "HVAC_OPERATING_STATE", "Idle" }, { "HVAC_OPERATING_MODE", "Off" },
+			{ "HVAC_CURRENT_SETPOINT", "15" }, { "HVAC_CURRENT_SETPOINT_HEAT", "15" }, { "HVAC_CURRENT_SETPOINT_COOL", "15" },
+			{ "DIMMER_LEVEL", "0" }
 		}
 	},
 	HEATER = {
 		type = "urn:schemas-upnp-org:device:Heater:1", file = "D_Heater1.xml",
 		parameters = {
-			{ "SWITCH_POWER", "0" }, { "HVAC_MODE_STATE", "Idle" }, { "HVAC_MODE_STATUS", "Off" },
+			{ "SWITCH_POWER", "0" }, { "HVAC_OPERATING_STATE", "Idle" }, { "HVAC_OPERATING_MODE", "Off" },
 			{ "HVAC_CURRENT_SETPOINT", "15" }, { "HVAC_CURRENT_SETPOINT_HEAT", "15" }
 		}
 	},
@@ -251,9 +271,19 @@ local JOB_STATUS = {
 -- ZiBlue equipments
 -- **************************************************
 
--- Equipment types
+-- Equipment types (capabilities)
 local EQUIPMENT = {
-	[ "0" ] = { -- X10 / DOMIA LITE protocol / PARROT
+	[ "PARROT;0" ] = { -- PARROT
+		name = "PARROT",
+		modelings = {
+			{
+				mappings = {
+					{ features = { "state" }, deviceTypes = { "BINARY_LIGHT" }, settings = { "receiver", "transmitter" } }
+				}
+			}
+		}
+	},
+	[ "0" ] = { -- X10 / DOMIA LITE protocol
 		name = "Detector/sensor",
 		modelings = {
 			{
@@ -326,7 +356,7 @@ local EQUIPMENT = {
 		modelings = {
 			{
 				mappings = {
-					{ features = { "state" } }, -- not used
+					{ features = { "state", "assoc" } }, -- not used
 					{ features = { "up/on" }, deviceTypes = { "BINARY_LIGHT" }, settings = { "transmitter", "pulse" }, isUsed = true },
 					{ features = { "down/off" }, deviceTypes = { "BINARY_LIGHT" }, settings = { "transmitter", "pulse" }, isUsed = true },
 					{ features = { "my" }, deviceTypes = { "BINARY_LIGHT" }, settings = { "transmitter", "pulse" }, isUsed = true }
@@ -427,7 +457,7 @@ local EQUIPMENT = {
 		modelings = {
 			{
 				mappings = {
-					{ features = { "total rain", "current rain" }, deviceTypes = { "RAIN_METER" }, settings = { "transmitter" } } -- TODO
+					{ features = { "total rain", "current rain" }, deviceTypes = { "RAIN_METER" }, settings = { "transmitter" } }
 				}
 			}
 		}
@@ -437,7 +467,7 @@ local EQUIPMENT = {
 		modelings = {
 			{
 				mappings = {
-					{ features = { "state" }, deviceTypes = { "HEATER", "THERMOSTAT", "PILOT_WIRE" }, settings = { "transmitter" } }
+					{ features = { "state", "heating speed", "regulation", "operating mode" }, deviceTypes = { "THERMOSTAT", "PILOT_WIRE" }, settings = { "transmitter" } }
 				}
 			}
 		}
@@ -463,6 +493,36 @@ local EQUIPMENT = {
 				}
 			}
 		}
+	},
+	[ "15|1" ] = { -- Edisio buttons (ETC1/ETC4/EBP8)
+		name = "Button",
+		modelings = {
+			{
+				mappings = {
+					{ features = { "state" }, deviceTypes = { "BINARY_LIGHT", "DIMMABLE_LIGHT" }, settings = { "transmitter" } }
+				}
+			}
+		}
+	},
+	[ "15|8" ] = { -- Edisio temperature (ETS-100)
+		name = "Thermo sensor",
+		modelings = {
+			{
+				mappings = {
+					{ features = { "temperature" }, deviceTypes = { "TEMPERATURE_SENSOR" }, settings = { "transmitter" } }
+				}
+			}
+		}
+	},
+	[ "15|9" ] = { -- Edisio temperature (EDS-100)
+		name = "Door sensor",
+		modelings = {
+			{
+				mappings = {
+					{ features = { "state" }, deviceTypes = { "DOOR_SENSOR" }, settings = { "transmitter" } }
+				}
+			}
+		}
 	}
 }
 
@@ -471,9 +531,7 @@ for _, equipmentInfos in pairs( EQUIPMENT ) do
 	for _, modeling in ipairs( equipmentInfos.modelings ) do
 		modeling.isUsed = false
 		for _, mapping in ipairs( modeling.mappings ) do
-			if not ( mapping.isUsed == true ) then
-				mapping.isUsed = false
-			end
+			mapping.isUsed = ( mapping.isUsed == true )
 			local features = {}
 			for _, featureName in ipairs( mapping.features ) do
 				features[ featureName ] = {}
@@ -485,166 +543,204 @@ end
 
 do --  Equipments commands/actions translation to Vera devices
 	DEVICE.SECURITY_SENSOR.commands = {
-		[ "on" ] = function( deviceId )
-			Device.setTripped( deviceId, "1" )
-		end,
-		[ "off" ] = function( deviceId )
-			Device.setTripped( deviceId, "0" )
-		end,
-		[ "alarm" ] = function( deviceId )
-			Device.setTripped( deviceId, "1" )
-		end,
-		[ "tamper" ] = function( deviceId )
-			Device.setTamperAlarm( deviceId, "1" )
-		end,
-		[ "supervisor/alive" ] = function( deviceId )
-			-- TODO
+		[ "state" ] = function( deviceId, state )
+			state = string.lower(state or "")
+			if ( ( state == "on" ) or ( state == "alarm" ) ) then
+				Device.setTripped( deviceId, "1" )
+			elseif ( state == "off" ) then
+				Device.setTripped( deviceId, "0" )
+			elseif ( state == "tamper" ) then
+				Device.setVariable( deviceId, "TAMPER_ALARM", "1" )
+			elseif ( state == "supervisor/alive" ) then
+				-- TODO
+			end
 		end
 	}
 	DEVICE.DOOR_SENSOR.commands = DEVICE.SECURITY_SENSOR.commands
 	DEVICE.MOTION_SENSOR.commands = DEVICE.SECURITY_SENSOR.commands
 	DEVICE.SMOKE_SENSOR.commands = DEVICE.SECURITY_SENSOR.commands
 	DEVICE.WIND_SENSOR.commands = {
-		[ "wind speed" ] = function( deviceId, data )
-			Device.setWindSpeed( deviceId, data )
+		[ "wind speed" ] = function( deviceId, windSpeed )
+			Device.setVariable( deviceId, "WIND_AVERAGE_SPEED", windSpeed, "m/s" )
 		end,
-		[ "direction" ] = function( deviceId, data )
-			Device.setWindDirection( deviceId, data )
+		[ "direction" ] = function( deviceId, windDirection )
+			Device.setVariable( deviceId, "WIND_DIRECTION", windDirection )
 		end
 	}
 	DEVICE.BAROMETER_SENSOR.commands = {
-		[ "pressure" ] = function( deviceId, data )
-			local pressure = tonumber( data.value )
+		[ "pressure" ] = function( deviceId, pressure )
 			Device.setPressure( deviceId, pressure )
 		end
 	}
 	DEVICE.UV_SENSOR.commands = {
-		[ "uv" ] = function( deviceId, data )
-			local uvLevel = tonumber( data.value )
-			Device.setUv( deviceId, uvLevel )
+		[ "uv" ] = function( deviceId, uvLevel )
+			Device.setVariable( deviceId, "UV_LEVEL", uvLevel )
+		end
+	}
+	DEVICE.RAIN_METER.commands = {
+		[ "total rain" ] = function( deviceId, totalRain )
+			Device.setVariable( deviceId, "RAIN_TOTAL", totalRain )
+		end,
+		[ "current rain" ] = function( deviceId, currentRain )
+			Device.setVariable( deviceId, "RAIN", currentRain )
 		end
 	}
 	DEVICE.BINARY_LIGHT.commands = {
-		[ "on" ] = function( deviceId )
-			Device.setStatus( deviceId, "1", nil, true )
-		end,
-		[ "off" ] = function( deviceId )
-			Device.setStatus( deviceId, "0", nil, true )
-		end,
-		[ "button/command" ] = function( deviceId )
-			Device.setStatus( deviceId, "1", nil, true )
-		end
-	}
-	DEVICE.DIMMABLE_LIGHT.commands = {
-		[ "on" ] = DEVICE.BINARY_LIGHT.commands["on"],
-		[ "off" ] = DEVICE.BINARY_LIGHT.commands["off"],
-		[ "dim" ] = function( deviceId, data )
-			local loadLevel = tonumber( data.value )
-			Device.setLoadLevel( deviceId, loadLevel, nil, nil, true )
-		end
-	}
-	DEVICE.TEMPERATURE_SENSOR.commands = {
-		[ "temperature" ] = function( deviceId, data )
-			local temperature = tonumber( data.value ) -- degree celcius
-			-- TODO : manage Fahrenheit
-			Device.setTemperature( deviceId, temperature )
-		end
-	}
-	DEVICE.HUMIDITY_SENSOR.commands = {
-		[ "hygrometry" ] = function( deviceId, data )
-			local humidity = tonumber( data.value )
-			if ( humidity and humidity ~= 0 ) then
-				Device.setHumidity( deviceId, humidity )
+		[ "state" ] = function( deviceId, state, params )
+			state = string.lower(state or "")
+			if ( ( state == "on" ) or ( state == "button/command" ) ) then
+				Device.setStatus( deviceId, "1", table_extend( { noAction = true }, params ) )
+			elseif ( state == "off" ) then
+				Device.setStatus( deviceId, "0", table_extend( { noAction = true }, params ) )
+			elseif ( state == "toggle" ) then
+				Device.setStatus( deviceId, nil, table_extend( { noAction = true }, params ) )
 			end
 		end
 	}
-	DEVICE.POWER_METER.commands = {
-		[ "energy" ] = function( deviceId, data )
-			local KWH = tonumber( data.value )
-			Device.setKWH( deviceId, KWH )
+	DEVICE.DIMMABLE_LIGHT.commands = {
+		[ "state" ] = DEVICE.BINARY_LIGHT.commands["state"],
+		[ "dim" ] = function( deviceId, loadLevel )
+			Device.setLoadLevel( deviceId, loadLevel, { noAction = true } )
 		end,
-		[ "power" ] = function( deviceId, data )
-			local watts = tonumber( data.value )
-			Device.setWatts( deviceId, watts )
+		[ "dim-up" ] = function( deviceId )
+			Device.setLoadLevel( deviceId, nil, { noAction = true, direction = "up" } )
+		end,
+		[ "dim-down" ] = function( deviceId )
+			Device.setLoadLevel( deviceId, nil, { noAction = true, direction = "down" } )
+		end,
+		[ "dim-a" ] = function( deviceId, data )
+			Device.setLoadLevel( deviceId, nil, { noAction = true, isLongPress = true } )
+		end,
+		[ "dim-stop" ] = function( deviceId, data )
+			-- TODO ?
+		end
+	}
+	DEVICE.TEMPERATURE_SENSOR.commands = {
+		[ "temperature" ] = function( deviceId, temperature )
+			-- degree celcius
+			-- TODO : manage Fahrenheit
+			Device.setVariable( deviceId, "TEMPERATURE", temperature, "°C" )
+		end
+	}
+	DEVICE.HUMIDITY_SENSOR.commands = {
+		[ "hygrometry" ] = function( deviceId, humidity )
+			Device.setVariable( deviceId, "HUMIDITY", humidity, "%" )
+		end
+	}
+	DEVICE.POWER_METER.commands = {
+		[ "energy" ] = function( deviceId, KWH )
+			Device.setVariable( deviceId, "KWH", KWH, "KWH" )
+		end,
+		[ "power" ] = function( deviceId, watts )
+			Device.setVariable( deviceId, "WATTS", watts, "W" )
 		end
 	}
 	DEVICE.SHUTTER.commands = {
-		[ "on" ] = DEVICE.BINARY_LIGHT.commands["on"],
-		[ "off" ] = DEVICE.BINARY_LIGHT.commands["off"],
-		[ "up/on" ] = DEVICE.BINARY_LIGHT.commands["on"],
-		[ "down/off" ] = DEVICE.BINARY_LIGHT.commands["off"],
+		[ "state" ] = DEVICE.BINARY_LIGHT.commands["state"],
+		[ "up/on" ] = function( deviceId )
+			Device.moveShutter( deviceId, "up", { noAction = true } )
+		end,
+		[ "down/off" ] = function( deviceId )
+			Device.moveShutter( deviceId, "down", { noAction = true } )
+		end,
 		[ "my" ] = function( deviceId )
-			-- TODO : get MY value from settings
-			Device.setLoadLevel( deviceId, "50", nil, nil, true )
+			Device.moveShutter( deviceId, "stop", { noAction = true } )
 		end
 	}
 	DEVICE.SCENE_CONTROLLER.commands = {
+		[ "scene" ] = function( deviceId, sceneId )
+			Device.setVariable( deviceId, "LAST_SCENE_ID", sceneId )
+		end,
 		[ "button1" ] = function( deviceId )
-			Device.setSceneId( deviceId, "1" )
+			Device.setVariable( deviceId, "LAST_SCENE_ID", "1" )
 		end,
 		[ "button2" ] = function( deviceId )
-			Device.setSceneId( deviceId, "2" )
+			Device.setVariable( deviceId, "LAST_SCENE_ID", "2" )
 		end,
 		[ "button3" ] = function( deviceId )
-			Device.setSceneId( deviceId, "3" )
+			Device.setVariable( deviceId, "LAST_SCENE_ID", "3" )
 		end,
 		[ "button4" ] = function( deviceId )
-			Device.setSceneId( deviceId, "4" )
+			Device.setVariable( deviceId, "LAST_SCENE_ID", "4" )
 		end
 	}
 	DEVICE.PILOT_WIRE.commands = {
+		[ "state" ] = function( deviceId, state )
+			-- TODO : model name
+		end,
+		[ "heating speed" ] = function( deviceId, state )
+			DEVICE.BINARY_LIGHT.commands["state"]( deviceId, state )
+		end,
+		[ "operating mode" ] = function( deviceId, mode )
+			mode = string.lower(mode or "")
+			local OPERATING_MODE = {
+				[ "eco" ] = "Eco",
+				[ "moderato" ] = "Comfort2",
+				[ "medio" ] = "Comfort1",
+				[ "comfort" ] = "Comfort",
+				[ "stop" ] = "Off",
+				[ "out of frost" ] = "OutOfFrost",
+				[ "special" ] = "Special", -- TODO : ?????
+				[ "auto" ] = "AutoChangeOver",
+				[ "centralized" ] = "Centralized" -- TODO : ?????
+			}
+			Device.setHVACOperatingMode( deviceId, OPERATING_MODE[mode] or "Off", { noAction = true } )
+		end,
 	}
 	DEVICE.THERMOSTAT.commands = {
+		[ "state" ] = function( deviceId, state )
+			-- TODO : model name
+		end,
+		[ "heating speed" ] = function( deviceId, state )
+			DEVICE.BINARY_LIGHT.commands["state"]( deviceId, state )
+		end,
+		[ "regulation" ] = function( deviceId, mode )
+			DEVICE.BINARY_LIGHT.commands["state"]( deviceId, state )
+		end,
+		[ "operating mode" ] = function( deviceId, mode )
+			mode = string.lower(mode or "")
+			local OPERATING_MODE = {
+				[ "eco" ] = "CoolOn",
+				[ "comfort" ] = "HeatOn",
+				[ "stop" ] = "Off",
+				[ "auto" ] = "AutoChangeOver"
+			}
+			Device.setHVACOperatingMode( deviceId, OPERATING_MODE[mode] or "Off", { noAction = true } )
+		end,
 	}
 	DEVICE.HEATER.commands = {
+		-- TODO
 	}
 end
 
-local function _getZiBlueInfos( protocol, infoType, subType )
-	local ziblueInfos = EQUIPMENT[ tostring(protocol) .. ";" .. tostring(infoType) ]
+local function _getEquipmentInfos( protocol, infoType, subType, modelId )
+	local equipmentInfos = EQUIPMENT[ tostring(protocol) .. ";" .. tostring(infoType) ]
+					or ( modelId and EQUIPMENT[ tostring(infoType) .. "|" .. tostring(modelId) ] )
 					or EQUIPMENT[ tostring(infoType) .. ";" .. tostring(subType) ]
 					or EQUIPMENT[ tostring(infoType) ]
 					or { name = "Unknown", modelings = {} }
-	return ziblueInfos
+	return equipmentInfos
 end
 
-local ZIBLUE_SEND_PROTOCOL = {
-	VISONIC433 = { name = "Visonic 433Mhz (PowerCode)", deviceSettings = { "receiver" } },
-	VISONIC868 = { name = "Visonic 868Mhz (PowerCode)", deviceSettings = { "receiver" } },
-	CHACON = {
-		name = "Chacon 433Mhz",
-		deviceTypes = { "BINARY_LIGHT", "SHUTTER" },
-		deviceSettings = { "receiver" }
-	},
+-- Virtual equipment types (by protocol)
+local VIRTUAL_EQUIPMENT = {
+	VISONIC433 = { name = "Visonic 433Mhz (PowerCode)" },
+	VISONIC868 = { name = "Visonic 868Mhz (PowerCode)" },
+	CHACON = { name = "Chacon 433Mhz", deviceTypes = { "BINARY_LIGHT", "SHUTTER" } },
 	DOMIA = { name = "Domia 433Mhz" },
-	X10 = {
-		name = "X10 433Mhz",
-		deviceTypes = { "BINARY_LIGHT", "SHUTTER" },
-		deviceSettings = { "receiver" }
-	},
-	X2D433 = { name = "X2D 433Mhz", deviceSettings = { "receiver" } },
-	X2D868 = { name = "X2D 868Mhz", deviceSettings = { "receiver" } },
-	X2DSHUTTER = {
-		name = "X2D Shutter 868Mhz",
-		deviceTypes = { "SHUTTER" },
-		deviceSettings = { "receiver" }
-	},
-	X2DELEC = {
-		name = "X2D Elec 868Mhz",
-		deviceTypes = { "PILOT_WIRE", "HEATER" },
-		deviceSettings = { "receiver" }
-	},
-	X2DGAS = {
-		name = "X2D Gaz 868Mhz",
-		deviceTypes = { "THERMOSTAT" },
-		deviceSettings = { "receiver" }
-	},
+	X10 = { name = "X10 433Mhz", deviceTypes = { "BINARY_LIGHT", "SHUTTER" } },
+	X2D433 = { name = "X2D 433Mhz" },
+	X2D868 = { name = "X2D 868Mhz" },
+	X2DSHUTTER = { name = "X2D Shutter 868Mhz", deviceTypes = { "SHUTTER" } },
+	X2DELEC = { name = "X2D Elec 868Mhz", deviceTypes = { "THERMOSTAT", "PILOT_WIRE" } },
+	X2DGAS = { name = "X2D Gaz 868Mhz", deviceTypes = { "THERMOSTAT" } },
 	RTS = {
 		name = "Somfy RTS 433Mhz",
-		deviceTypes = { "BINARY_LIGHT", "SHUTTER;qualifier=0", "SCENE_CONTROLLER;qualifier=1" }, -- TODO Portal
-		deviceSettings = { "receiver" },
+		deviceTypes = { "SHUTTER;qualifier=0", "SCENE_CONTROLLER;qualifier=1" }, -- TODO Portal
+		deviceSettings = { "receiver", "my=50" },
+		-- deviceTypes = { "SHUTTER;qualifier=0", "PORTAL;qualifier=1" },
 		protocolSettings = {
-			{ variable = "qualifier", name = "Qualifier", type = "string" }
+			{ variable = "qualifier", name = "qualifier", type = "string" }
 		}
 	},
 	BLYSS = { name = "Blyss 433Mhz" },
@@ -653,17 +749,100 @@ local ZIBLUE_SEND_PROTOCOL = {
 		--deviceTypes = { "BINARY_LIGHT", "DOOR_SENSOR", "MOTION_SENSOR", "SMOKE_SENSOR" },
 		deviceSettings = { "receiver", "transmitter" },
 		protocolSettings = {
-			{ variable = "comment", name = "Reminder", type = "string" },
-			{ variable = "action", name = "Action", type = "select", values = { "ON", "OFF" } }
+			{ variable = "comment", name = "reminder", type = "string" },
+			{ variable = "action", name = "action", type = "select", values = { "ON", "OFF" } }
 		}
 	},
-	KD101 = { name = "KD101 433Mhz", deviceSettings = { "receiver" } }
+	KD101 = { name = "KD101 433Mhz" }, -- TODO Alarm with scene or button
+	EDISIO = {
+		name = "Edisio 868Mhz",
+		deviceTypes = { "BINARY_LIGHT", "DIMMABLE_LIGHT" },
+		protocolSettings = {
+			{ variable = "qualifier", name = "channel", type = "string" }
+		}
+	}
 }
+for _, virtualEquipmentInfos in pairs( VIRTUAL_EQUIPMENT ) do
+	virtualEquipmentInfos.features = { "virtual" }
+	if not virtualEquipmentInfos.deviceTypes then
+		virtualEquipmentInfos.deviceTypes = { "BINARY_LIGHT" }
+	end
+	if not virtualEquipmentInfos.deviceSettings then
+		virtualEquipmentInfos.deviceSettings = { "receiver" }
+	end
+end
 
 local ZIBLUE_FREQUENCY = {
 	[ "-1" ] = "",
 	[ "0" ] = "433",
 	[ "1" ] = "868"
+}
+
+local ZIBLUE_SETTINGS = {
+	[ "system.jamming" ] = {
+		action = "SetParam",
+		variable = "jamming",
+		["type"] = "select",
+		values = {
+			{ "0", "OFF" },
+			{ "1", "1 - Most sensitive on a single frequency" },
+			{ "2", "2" },
+			{ "3", "3" },
+			{ "4", "4" },
+			{ "5", "5" },
+			{ "6", "6 - Most sensitive on two frequencies" },
+			{ "7", "7 - Default" },
+			{ "8", "8" },
+			{ "9", "9" },
+			{ "10", "10 - Least sensitive" }
+		}
+	},
+	[ "radio.0.frequency" ] = {
+		action = "SetParam",
+		variable = "frequency",
+		["type"] = "select",
+		values = {
+			{ "0", "OFF" },
+			{ "433420", "433.420 Mhz" }, -- Default
+			{ "433920", "433.920 Mhz" }
+		}
+	},
+	[ "radio.0.selectivity" ] = {
+		action = "SetParam",
+		variable = "selectivity",
+		["type"] = "select",
+		values = {
+			{ "0", "Medium selectivity (300Khz)" }, -- Default
+			{ "1", "Very low selectivity (800Khz), frequency centered between (433420-433920)" },
+			{ "2", "Very low selectivity (800Khz)" },
+			{ "3", "Low selectivity (500Khz)" },
+			{ "4", "Medium selectivity (300Khz)" },
+			{ "5", "High selectivity (200Khz)" }
+		}
+	},
+	[ "radio.1.frequency" ] = {
+		action = "SetParam",
+		variable = "frequency",
+		["type"] = "select",
+		values = {
+			{ "0", "OFF" },
+			{ "868950", "868.950 Mhz" }, -- Default
+			{ "868350", "868.350 Mhz" }
+		}
+	},
+	[ "radio.1.selectivity" ] = {
+		action = "SetParam",
+		variable = "selectivity",
+		["type"] = "select",
+		values = {
+			{ "0", "Medium selectivity (300Khz)" }, -- Default
+			{ "1", "Very low selectivity (800Khz), frequency centered between (868350-868950)" },
+			{ "2", "Very low selectivity (800Khz)" },
+			{ "3", "Low selectivity (500Khz)" },
+			{ "4", "Medium selectivity (300Khz)" },
+			{ "5", "High selectivity (200Khz)" }
+		}
+	}
 }
 
 local ZIBLUE_SEND_ACTION = {
@@ -694,10 +873,7 @@ end
 
 local DEVICE_ID      -- The device # of the parent device
 
-local g_maxId = 0           -- A number that increments with every device learned.
-local g_baseId = ""
-
-local _settings = {
+local SETTINGS = {
 	plugin = {
 		pollInterval = 30
 	},
@@ -717,6 +893,32 @@ do
 		end
 		return tostring( n )
 	end
+
+	function number_toBytes( num, endian, signed )
+		if ( ( num < 0 ) and not signed ) then
+			num = -num
+		end
+		local res = {}
+		local n = math.ceil( select( 2, math.frexp(num) ) / 8 ) -- number of bytes to be used.
+		if ( signed and num < 0 ) then
+			num = num + 2^n
+		end
+		for k = n, 1, -1 do -- 256 = 2^8 bits per char.
+			local mul = 2^(8*(k-1))
+			res[k] = math.floor( num / mul )
+			num = num - res[k] * mul
+		end
+		assert( num == 0 )
+		if endian == "big" then
+			local t={}
+			for k = 1, n do
+				t[k] = res[n-k+1]
+			end
+			res = t
+		end
+		return string.char(unpack(res))
+	end
+
 end
 
 -- **************************************************
@@ -726,45 +928,44 @@ end
 do
 	-- Merges (deeply) the contents of one table (t2) into another (t1)
 	function table_extend( t1, t2, excludedKeys )
-		if ( ( t1 == nil ) or ( t2 == nil ) ) then
-			return
-		end
-		local exclKeys
-		if ( type( excludedKeys ) == "table" ) then
-			exclKeys = {}
-			for _, key in ipairs( excludedKeys ) do
-				exclKeys[ key ] = true
+		if ( ( type(t1) == "table" ) and ( type(t2) == "table" ) ) then
+			local exclKeys
+			if ( type( excludedKeys ) == "table" ) then
+				exclKeys = {}
+				for _, key in ipairs( excludedKeys ) do
+					exclKeys[ key ] = true
+				end
 			end
-		end
-		for key, value in pairs( t2 ) do
-			if ( not exclKeys or not exclKeys[ key ] ) then
-				if ( type( value ) == "table" ) then
-					if ( type( t1[key] ) == "table" ) then
-						t1[key] = table_extend( t1[key], value, excludedKeys )
-					else
-						t1[key] = table_extend( {}, value, excludedKeys )
-					end
-				elseif ( value ~= nil ) then
-					if ( type( t1[key] ) == type( value ) ) then
-						t1[key] = value
-					else
-						-- Try to keep the former type
-						if ( type( t1[key] ) == "number" ) then
-							luup.log( "table_extend : convert '" .. key .. "' to number " , 2 )
-							t1[key] = tonumber( value )
-						elseif ( type( t1[key] ) == "boolean" ) then
-							luup.log( "table_extend : convert '" .. key .. "' to boolean" , 2 )
-							t1[key] = ( value == true )
-						elseif ( type( t1[key] ) == "string" ) then
-							luup.log( "table_extend : convert '" .. key .. "' to string" , 2 )
-							t1[key] = tostring( value )
+			for key, value in pairs( t2 ) do
+				if ( not exclKeys or not exclKeys[ key ] ) then
+					if ( type( value ) == "table" ) then
+						if ( type( t1[key] ) == "table" ) then
+							t1[key] = table_extend( t1[key], value, excludedKeys )
 						else
+							t1[key] = table_extend( {}, value, excludedKeys )
+						end
+					elseif ( value ~= nil ) then
+						if ( type( t1[key] ) == type( value ) ) then
 							t1[key] = value
+						else
+							-- Try to keep the former type
+							if ( type( t1[key] ) == "number" ) then
+								luup.log( "table_extend : convert '" .. key .. "' to number " , 2 )
+								t1[key] = tonumber( value )
+							elseif ( type( t1[key] ) == "boolean" ) then
+								luup.log( "table_extend : convert '" .. key .. "' to boolean" , 2 )
+								t1[key] = ( value == true )
+							elseif ( type( t1[key] ) == "string" ) then
+								luup.log( "table_extend : convert '" .. key .. "' to string" , 2 )
+								t1[key] = tostring( value )
+							else
+								t1[key] = value
+							end
 						end
 					end
+				elseif ( value ~= nil ) then
+					t1[key] = value
 				end
-			elseif ( value ~= nil ) then
-				t1[key] = value
 			end
 		end
 		return t1
@@ -937,6 +1138,18 @@ do
 		return t
 	end
 
+	function string_fromHex( s )
+		return ( s:gsub( '..', function( cc )
+			return string.char( tonumber(cc, 16) )
+		end ))
+	end
+
+	function string_toHex( s )
+		return ( s:gsub( '.', function( c )
+			return string.format( '%02X', string.byte(c) )
+		end ))
+	end
+
 	-- Formats a string into hex.
 	function string_formatToHex( s, sep )
 		sep = sep or "-"
@@ -953,6 +1166,9 @@ do
 	end
 
 	function string_decodeURI( s )
+		if string_isEmpty( s ) then
+			return ""
+		end
 		local hex={}
 		for i = 0, 255 do
 			hex[ string.format("%0X",i) ] = string.char(i)
@@ -1009,10 +1225,11 @@ Variable = {
 	end,
 
 	-- Get variable timestamp
-	getTimestamp = function( deviceId, variable )
+	getTimestamp = function( deviceId, variable, isActive )
 		variable = _getVariable( variable )
-		if ( ( type( variable ) == "table" ) and ( type( variable[4] ) == "string" ) ) then
-			local variableTimestamp = VARIABLE[ variable[4] ]
+		local pos = isActive and 4 or 5
+		if ( ( type( variable ) == "table" ) and ( type( variable[pos] ) == "string" ) ) then
+			local variableTimestamp = VARIABLE[ variable[pos] ]
 			if ( variableTimestamp ~= nil ) then
 				return tonumber( ( luup.variable_get( variableTimestamp[1], variableTimestamp[2], deviceId ) ) )
 			end
@@ -1021,10 +1238,11 @@ Variable = {
 	end,
 
 	-- Set variable timestamp
-	setTimestamp = function( deviceId, variable, timestamp )
+	setTimestamp = function( deviceId, variable, timestamp, isActive )
 		variable = _getVariable( variable )
-		if ( variable[4] ~= nil ) then
-			local variableTimestamp = VARIABLE[ variable[4] ]
+		local pos = isActive and 4 or 5
+		if ( variable[pos] ~= nil ) then
+			local variableTimestamp = VARIABLE[ variable[pos] ]
 			if ( variableTimestamp ~= nil ) then
 				luup.variable_set( variableTimestamp[1], variableTimestamp[2], ( timestamp or os.time() ), deviceId )
 			end
@@ -1044,12 +1262,7 @@ Variable = {
 			return
 		end
 		local value, timestamp = luup.variable_get( variable[1], variable[2], deviceId )
-		if ( value ~= "0" ) then
-			local storedTimestamp = Variable.getTimestamp( deviceId, variable )
-			if ( storedTimestamp ~= nil ) then
-				timestamp = storedTimestamp
-			end
-		end
+		timestamp = Variable.getTimestamp( deviceId, variable, ( value ~= "0" ) ) or timestamp
 		return value, timestamp
 	end,
 
@@ -1083,26 +1296,6 @@ Variable = {
 		local doChange = true
 		local currentValue = luup.variable_get( variable[1], variable[2], deviceId )
 		local deviceType = luup.devices[deviceId].device_type
-		--[[
-		if (
-			(variable == VARIABLE.TRIPPED)
-			and (currentValue == value)
-			and (
-				(deviceType == DEVICE.MOTION_SENSOR.type)
-				or (deviceType == DEVICE.DOOR_SENSOR.type)
-				or (deviceType == DEVICE.SMOKE_SENSOR.type)
-			)
-			and (luup.variable_get(VARIABLE.REPEAT_EVENT[1], VARIABLE.REPEAT_EVENT[2], deviceId) == "0")
-		) then
-			doChange = false
-		elseif (
-				(luup.devices[deviceId].device_type == tableDeviceTypes.LIGHT[1])
-			and (variable == VARIABLE.LIGHT)
-			and (currentValue == value)
-			and (luup.variable_get(VARIABLE.VAR_REPEAT_EVENT[1], VARIABLE.VAR_REPEAT_EVENT[2], deviceId) == "1")
-		) then
-			luup.variable_set(variable[1], variable[2], "-1", deviceId)
-		else--]]
 		if ( ( currentValue == value ) and ( ( variable[3] == true ) or ( value == "0" ) ) ) then
 			-- Variable is not updated when the value is unchanged
 			doChange = false
@@ -1112,10 +1305,8 @@ Variable = {
 			luup.variable_set( variable[1], variable[2], value, deviceId )
 		end
 
-		-- Updates linked variable for timestamp (just for active value)
-		if ( value ~= "0" ) then
-			Variable.setTimestamp( deviceId, variable, os.time() )
-		end
+		-- Updates linked variable for timestamp
+		Variable.setTimestamp( deviceId, variable, os.time(), ( value ~= "0" ) )
 	end,
 
 	-- Get variable value and init if value is nil or empty
@@ -1125,7 +1316,7 @@ Variable = {
 			value = defaultValue
 			Variable.set( deviceId, variable, value )
 			timestamp = os.time()
-			Variable.setTimestamp( deviceId, variable, timestamp )
+			Variable.setTimestamp( deviceId, variable, timestamp, true )
 		end
 		return value, timestamp
 	end,
@@ -1152,34 +1343,31 @@ Variable = {
 local _indexDeviceInfos = {}
 for deviceTypeName, deviceInfos in pairs( DEVICE ) do
 	deviceInfos.name = deviceTypeName
-	_indexDeviceInfos[ deviceInfos.type ] = deviceInfos
-end
-setmetatable(_indexDeviceInfos, {
-	__index = function( t, deviceType )
-		warning( "Can not get infos for device type '" .. tostring( deviceType ) .. "'", "Device.getInfos" )
-		return {
-			type = deviceType
-		}
+	if deviceInfos.json then
+		_indexDeviceInfos[ deviceInfos.type .. ";" .. deviceInfos.json ] = deviceInfos
+	else
+		_indexDeviceInfos[ deviceInfos.type ] = deviceInfos
 	end
-})
+end
 
 Device = {
-	-- Get device type infos, by device id, type name or UPnP device id (e.g. "BINARY_LIGHT" or "urn:schemas-upnp-org:device:BinaryLight:1")
+	-- Get device type infos, by device id, type name (e.g. "BINARY_LIGHT") or UPnP device id (e.g. "urn:schemas-upnp-org:device:BinaryLight:1")
 	getInfos = function( deviceType )
+		local deviceInfos
 		if ( type(deviceType) == "number" ) then
 			-- Get the device type from the id
-			local luDevice = luup.devices[deviceType]
+			local deviceId = deviceType
+			local luDevice = luup.devices[deviceId]
 			if luDevice then
+				local deviceJson = luup.attr_get( "device_json", deviceId ) or ""
 				deviceType = luDevice.device_type
+				
+				debug( "deviceJson " .. deviceJson, "Device.getInfos" )
+				deviceInfos = deviceJson and _indexDeviceInfos[ deviceType .. ";" .. deviceJson ] or _indexDeviceInfos[ deviceType ]
 			end
-		elseif ( deviceType == nil ) then
-			deviceType = ""
-		end
-		-- Get the device infos
-		local deviceInfos = DEVICE[ deviceType ]
-		if ( deviceInfos == nil ) then
-			-- Not known by name, try with UPnP device id
-			deviceInfos = _indexDeviceInfos[ deviceType ]
+		elseif ( type(deviceType) == "string" ) then
+			-- Get the device infos from type name or otherwise from UPnP device id
+			deviceInfos = DEVICE[ deviceType ] or _indexDeviceInfos[ deviceType ]
 		end
 		return deviceInfos
 	end,
@@ -1195,7 +1383,7 @@ Device = {
 	end,
 
 	fileExists = function( deviceInfos )
-		local name = deviceInfos.file
+		local name = deviceInfos.file or ""
 		return (
 				Tools.fileExists( "/etc/cmh-lu/" .. name .. ".lzo" ) or Tools.fileExists( "/etc/cmh-lu/" .. name )
 			or	Tools.fileExists( "/etc/cmh-ludl/" .. name .. ".lzo" ) or Tools.fileExists( "/etc/cmh-ludl/" .. name )
@@ -1208,24 +1396,36 @@ Device = {
 	end,
 
 	-- Switch OFF/ON/TOGGLE
-	setStatus = function( deviceId, status, isLongPress, noAction )
+	setStatus = function( deviceId, status, params )
 		if status then
 			status = tostring( status )
 		end
+		local params = params or {}
 		local formerStatus = Variable.get( deviceId, "SWITCH_POWER" ) or "0"
-		local equipment, features, device = Equipments.getFromDeviceId( deviceId )
-		local msg = "Equipment '" .. Tools.getProductInfo( equipment, features ) .. "'"
-		if ( device.settings.receiver ) then
-			msg = msg .. " (receiver)"
+		local equipment, mapping = Equipments.getFromDeviceId( deviceId )
+		local msg = "Equipment " .. Tools.getEquipmentSummary( equipment, mapping )
+		if mapping.device.settings.receiver then
+			msg = msg .. ",(receiver)"
+		end
+		if mapping.device.settings.transmitter then
+			msg = msg .. ",(transmitter)"
 		end
 
-		-- Pulse
-		local isPulse = ( device.settings.pulse == true )
+		-- Momentary
+		local isMomentary = ( mapping.device.settings.momentary == true )
+		if ( isMomentary and ( status == "0" ) and not params.isAfterTimeout ) then
+			debug( msg .. " - Begin of momentary state", "Device.setStatus" )
+			return
+		end
+
 		-- Toggle
-		local isToggle = ( device.settings.toggle == true )
+		local isToggle = ( mapping.device.settings.toggle == true )
 		if ( isToggle or ( status == nil ) or ( status == "" ) ) then
-			if isPulse then
-				-- Always ON in pulse and toggle mode
+			if ( status == "0" ) then
+				debug( msg .. " - Toggle : ignore OFF state", "Device.setStatus" )
+				return
+			elseif isMomentary then
+				-- Always ON in momentary and toggle mode
 				msg = msg .. " - Switch"
 				status = "1"
 			else
@@ -1240,8 +1440,15 @@ Device = {
 			msg = msg .. " - Switch"
 		end
 
+		-- Long press (works at least for Xiaomi button)
+		local isLongPress = false
+		local timeForLongPress = tonumber(mapping.device.settings.timeForLongPress) or 0
+		if ( isMomentary and ( timeForLongPress > 0 ) and ( status == "1" ) and ( params.lastData == "off" ) and ( params.elapsedTime >= timeForLongPress ) ) then
+			isLongPress = true
+		end
+
 		-- Has status changed ?
-		if ( status == formerStatus ) then
+		if ( not isMomentary and ( status == formerStatus ) ) then
 			debug( msg .. " - Status has not changed", "Device.setStatus" )
 			return
 		end
@@ -1272,84 +1479,101 @@ Device = {
 		Variable.set( deviceId, "SWITCH_POWER", status )
 		if loadLevel then
 			if ( loadLevel == 0 ) then
+				-- Store the current load level
 				Variable.set( deviceId, "DIMMER_LEVEL_OLD", Variable.get( deviceId, "DIMMER_LEVEL" ) )
 			end
 			Variable.set( deviceId, "DIMMER_LEVEL", loadLevel )
 		end
 
-		-- Send command if needed
-		if ( device.settings.receiver and not ( noAction == true ) ) then
+		-- Send command to the linked equipment if needed
+		if ( mapping.device.settings.receiver and not params.noAction ) then
 			if ( loadLevel and Device.isDimmable( deviceId ) ) then 
-				Equipment.setLoadLevel( equipment, loadLevel, device.settings )
+				Equipment.setLoadLevel( equipment, loadLevel, mapping )
 			else
-				Equipment.setStatus( equipment, status, device.settings )
+				Equipment.setStatus( equipment, status, mapping )
 			end
 		end
 
-		-- Pulse
-		if ( isPulse and ( status == "1" ) ) then
-			-- TODO : OFF après 200ms : voir multiswitch
-			msg = "Equipment '" .. Tools.getProductInfo( equipment, features ) .. "' - Pulse OFF device #" .. tostring( deviceId )
-			if Device.isDimmable( deviceId ) then
-				debug( msg .. " at 0%", "Device.setStatus" )
-				Variable.set( deviceId, "SWITCH_POWER", "0" )
-				Variable.set( deviceId, "DIMMER_LEVEL_OLD", Variable.get( deviceId, "DIMMER_LEVEL" ) )
-				Variable.set( deviceId, "DIMMER_LEVEL", 0 )
-			else
-				debug( msg, "Device.setStatus" )
-				Variable.set( deviceId, "SWITCH_POWER", "0" )
-			end
+		-- Propagate to associated devices
+		if not params.noPropagation then
+			Association.propagate( mapping.device.association, status, loadLevel, isLongPress )
 		end
 
-		-- Association
-		Association.propagate( device.association, status, loadLevel, isLongPress )
-		if ( isPulse and ( status == "1" ) ) then
-			Association.propagate( device.association, "0", nil, isLongPress )
+		-- Momentary
+		if ( isMomentary and ( status == "1" ) ) then
+			local timeout = mapping.device.settings.timeout or 0
+			if ( timeout > 0 ) then
+				debug( "Device #" .. tostring( deviceId ) .. " will be switch OFF in " .. tostring(timeout) .. "s", "Device.setStatus" )
+				luup.call_delay( _NAME .. ".Device.setStatusAfterTimeout", timeout, deviceId )
+			else
+				status = "0"
+				Device.setStatus( deviceId, status, { noAction = true, noPropagation = true, isAfterTimeout = true } )
+			end
 		end
 
 		return status
 	end,
 
+	setStatusAfterTimeout = function( deviceId )
+		deviceId = tonumber( deviceId )
+		local equipment, mapping = Equipments.getFromDeviceId( deviceId )
+		local timeout = tonumber(mapping.device.settings.timeout) or 0
+		if ( ( timeout > 0 ) and ( Variable.get( deviceId, VARIABLE.SWITCH_POWER ) == "1" ) ) then 
+			local elapsedTime = os.difftime( os.time(), Variable.getTimestamp( deviceId, VARIABLE.SWITCH_POWER ) or 0 )
+			if ( elapsedTime >= timeout ) then
+				Device.setStatus( deviceId, "0", { noAction = true, isAfterTimeout = true } )
+			end
+		end
+	end,
+
 	-- Dim OFF/ON/TOGGLE
-	setLoadLevel = function( deviceId, loadLevel, direction, isLongPress, noAction )
+	setLoadLevel = function( deviceId, loadLevel, params )
+		local params = params or {}
 		loadLevel = tonumber( loadLevel )
+		local equipment, mapping = Equipments.getFromDeviceId( deviceId )
+
+		if ( mapping.device.typeName == "PILOT_WIRE" ) then
+			-- Specific to Pilot Wire (using Qubino static JSON file)
+			return Device.setHVACOperatingMode( deviceId, tostring(loadLevel), table_extend( { isLoadLevel = true }, params ) )
+		end
+
 		local formerLoadLevel, lastLoadLevelChangeTime = Variable.get( deviceId, "DIMMER_LEVEL" )
 		formerLoadLevel = tonumber( formerLoadLevel ) or 0
-		local equipment, features, device = Equipments.getFromDeviceId( deviceId )
+		local dimmingStep = tonumber(mapping.device.settings.dimmingStep) or 3
 		local msg = "Dim"
 
-		if ( isLongPress and not Device.isDimmable( deviceId ) ) then
+		if ( params.isLongPress and not Device.isDimmable( deviceId ) ) then
 			-- Long press handled by a switch
-			return Device.setStatus( deviceId, nil, isLongPress, noAction )
+			return Device.setStatus( deviceId, nil, params )
 
 		elseif ( loadLevel == nil ) then
 			-- Toggle dim
 			loadLevel = formerLoadLevel
-			if ( direction == nil ) then
-				direction = Variable.getOrInit( deviceId, "DIMMER_DIRECTION", "up" )
+			if ( params.direction == nil ) then
+				params.direction = Variable.getOrInit( deviceId, "DIMMER_DIRECTION", "up" )
 				if ( os.difftime( os.time(), lastLoadLevelChangeTime ) > 2 ) then
 					-- Toggle direction after 2 seconds of inactivity
 					msg = "Toggle dim"
-					if ( direction == "down" ) then
-						direction = "up"
+					if ( params.direction == "down" ) then
+						params.direction = "up"
 						Variable.set( deviceId, "DIMMER_DIRECTION", "up" )
 					else
-						direction = "down"
+						params.direction = "down"
 						Variable.set( deviceId, "DIMMER_DIRECTION", "down" )
 					end
 				end
 			end
-			if ( direction == "down" ) then
-				loadLevel = loadLevel - 3
-				msg = msg .. "-"
+			if ( params.direction == "down" ) then
+				loadLevel = loadLevel - dimmingStep
+				msg = msg .. "-" .. tostring(dimmingStep)
 			else
-				loadLevel = loadLevel + 3
-				msg = msg .. "+"
+				loadLevel = loadLevel + dimmingStep
+				msg = msg .. "+" .. tostring(dimmingStep)
 			end
 		end
 
 		-- Update load level variable
-		if ( loadLevel < 3 ) then
+		if ( loadLevel < dimmingStep ) then
 			loadLevel = 0
 		elseif ( loadLevel > 100 ) then
 			loadLevel = 100
@@ -1362,6 +1586,7 @@ Device = {
 		end
 
 		debug( msg .. " device #" .. tostring( deviceId ) .. " at " .. tostring( loadLevel ) .. "%", "Device.setLoadLevel" )
+		Variable.set( deviceId, "DIMMER_LEVEL_TARGET", loadLevel )
 		Variable.set( deviceId, "DIMMER_LEVEL", loadLevel )
 		if ( loadLevel > 0 ) then
 			Variable.set( deviceId, "SWITCH_POWER", "1" )
@@ -1369,25 +1594,25 @@ Device = {
 			Variable.set( deviceId, "SWITCH_POWER", "0" )
 		end
 
-		-- Send command if needed
-		if ( device.settings.receiver and not ( noAction == true ) ) then
+		-- Send command to the linked equipment if needed
+		if ( mapping.device.settings.receiver and not ( params.noAction == true ) ) then
 			if ( loadLevel > 0 ) then
 				if not Device.isDimmable( deviceId ) then
 					if ( loadLevel == 100 ) then
-						Equipment.setStatus( equipment, "1", device.settings )
+						Equipment.setStatus( equipment, "1", mapping )
 					else
 						debug( "This device does not support DIM", "Device.setLoadLevel" )
 					end
 				else
-					Equipment.setLoadLevel( equipment, loadLevel, device.settings )
+					Equipment.setLoadLevel( equipment, loadLevel, mapping )
 				end
 			else
-				Equipment.setStatus( equipment, "0", device.settings )
+				Equipment.setStatus( equipment, "0", mapping )
 			end
 		end
 
-		-- Association
-		Association.propagate( device.association, nil, loadLevel, isLongPress )
+		-- Propagate to associated devices
+		Association.propagate( mapping.device.association, nil, loadLevel, params.isLongPress )
 
 		return loadLevel
 	end,
@@ -1415,84 +1640,69 @@ Device = {
 			return
 		end
 		tripped = tostring( tripped or "0" )
-		if ( tripped == "1" ) then
-			debug( "Device #" .. tostring( deviceId ) .. " is tripped", "Device.setTripped" )
-		else
-			debug( "Device #" .. tostring( deviceId ) .. " is untripped", "Device.setTripped" )
+		local formerTripped = Variable.get( deviceId, "TRIPPED" ) or "0"
+		local equipment, mapping = Equipments.getFromDeviceId( deviceId )
+		if ( tripped ~= formerTripped ) then
+			debug( "Device #" .. tostring( deviceId ) .. " is " .. ( ( tripped == "1" ) and "tripped" or "untripped" ), "Device.setTripped" )
+			Variable.set( deviceId, "TRIPPED", tripped )
+			if ( ( tripped == "1" ) and ( Variable.get( deviceId, "ARMED" ) == "1" ) ) then
+				Variable.set( deviceId, "ARMED_TRIPPED", "1" )
+			else
+				Variable.set( deviceId, "ARMED_TRIPPED", "0" )
+			end
+			-- Propagate to associated devices
+			Association.propagate( mapping.device.association, tripped )
 		end
-		Variable.set( deviceId, "TRIPPED", tripped )
-		if ( ( tripped == "1" ) and ( Variable.get( deviceId, "ARMED" ) == "1" ) ) then
-			Variable.set( deviceId, "ARMED_TRIPPED", "1" )
-		else
-			Variable.set( deviceId, "ARMED_TRIPPED", "0" )
+
+		-- Momentary
+		local isMomentary = ( mapping.device.settings.momentary == true )
+		if ( isMomentary and ( tripped == "1" ) ) then
+			local timeout = tonumber(mapping.device.settings.timeout) or 0
+			if ( timeout > 0 ) then
+				debug( "Device #" .. tostring( deviceId ) .. " will be untripped in " .. tostring(timeout) .. "s", "Device.setTripped" )
+				Variable.set( deviceId, "NEXT_SCHEDULE", os.time() + timeout )
+				luup.call_delay( _NAME .. ".Device.setTrippedAfterTimeout", timeout, deviceId )
+			end
 		end
 	end,
 
-	-- Set tamper alarm
-	setTamperAlarm  = function( deviceId, alarm )
-		if not Variable.isSupported( deviceId, "TAMPER_ALARM" ) then
-			return
-		end
-		debug( "Set device #" .. tostring(deviceId) .. " tamper alarm to '" .. tostring( alarm ) .. "'", "Device.setTamperAlarm" )
-		Variable.set( deviceId, "TAMPER_ALARM", alarm )
-	end,
-
-	-- Set temperature
-	setTemperature = function( deviceId, temperature )
-		if not Variable.isSupported( deviceId, "TEMPERATURE" ) then
-			return
-		end
-		debug( "Set device #" .. tostring(deviceId) .. " temperature to " .. tostring( temperature ) .. "°C", "Device.setTemperature" )
-		Variable.set( deviceId, "TEMPERATURE", temperature )
-	end,
-
-	-- Set humidity
-	setHumidity = function( deviceId, humidity )
-		if not Variable.isSupported( deviceId, "HUMIDITY" ) then
-			return
-		end
-		local humidity = tonumber( humidity )
-		if ( humidity and humidity ~= 0 ) then
-			debug( "Set device #" .. tostring(deviceId) .. " humidity to " .. tostring( humidity ) .. "%", "Device.setHygrometry" )
-			Variable.set( deviceId, "HUMIDITY", humidity )
+	setTrippedAfterTimeout = function( deviceId )
+		deviceId = tonumber( deviceId )
+		local nextSchedule = tonumber((Variable.get( deviceId, "NEXT_SCHEDULE" ))) or 0
+		if ( os.time() >= nextSchedule ) then
+			Device.setTripped( deviceId, "0" )
 		end
 	end,
 
-	-- Set watts
-	setWatts = function( deviceId, watts )
-		if not Variable.isSupported( deviceId, "WATTS" ) then
+	-- Set a variable value
+	setVariable = function( deviceId, variableName, value, unit )
+		if not Variable.isSupported( deviceId, variableName ) then
 			return
 		end
-		debug( "Set device #" .. tostring(deviceId) .. " watts to " .. tostring( watts ) .. "W", "Device.setWatts" )
-		Variable.set( deviceId, "WATTS", watts )
+		debug( "Set device #" .. tostring(deviceId) .. " " .. variableName .. " to " .. tostring( value ) .. ( unit or "" ), "Device.setVariable" )
+		Variable.set( deviceId, variableName, value )
 	end,
 
-	-- Set KWH
-	setKWH = function( deviceId, KWH )
-		if not Variable.isSupported( deviceId, "KWH" ) then
+	-- Set atmospheric pressure
+	setPressure = function( deviceId, pressure )
+		--[[if not Variable.isSupported( deviceId, "PRESSURE" ) then
 			return
-		end
-		debug( "Set device #" .. tostring(deviceId) .. " watt to " .. tostring( KWH ) .. "Wh", "Device.setKWH" )
-		Variable.set( deviceId, "KWH", KWH )
-	end,
-
-	-- Set scene id
-	setSceneId = function( deviceId, sceneId )
-		if not Variable.isSupported( deviceId, "LAST_SCENE_ID" ) then
-			return
-		end
-		debug( "Set device #" .. tostring(deviceId) .. " last scene to '" .. tostring(sceneId) .. "'", "Device.setSceneId" )
-		Variable.set( deviceId, "LAST_SCENE_ID", sceneId )
+		end--]]
+		local pressure = tonumber( pressure )
+		local forecast = "TODO" -- TODO
+		--[[
+		"sunny"
+		"partly cloudy"
+		"cloudy"
+		"rain"
+		--]]
+		debug( "Set device #" .. tostring(deviceId) .. " pressure to " .. tostring( pressure ) .. "hPa and forecast to " .. forecast, "Device.setPressure" )
+		Variable.set( deviceId, "PRESSURE", pressure )
+		Variable.set( deviceId, "FORECAST", forecast )
 	end,
 
 	-- Set battery level
 	setBatteryLevel = function( deviceId, batteryLevel )
-		-- TODO : comment identifier un périphérique à pile ?
-		--[[
-		if not equipment.isBatteryPowered then
-			return
-		end
-		--]]
 		local batteryLevel = tonumber(batteryLevel) or 0
 		if (batteryLevel < 0) then
 			batteryLevel = 0
@@ -1504,20 +1714,23 @@ Device = {
 	end,
 
 	-- Manage roller shutter
-	moveShutter = function( deviceId, direction, noAction )
+	moveShutter = function( deviceId, direction, params )
+		local params = params or {}
 		debug( "Shutter #" .. tostring(deviceId) .. " direction: " .. tostring(direction), "Device.moveShutter" )
 		if ( direction == "up" ) then
-			return Device.setStatus( deviceId, "1", nil, noAction )
+			return Device.setStatus( deviceId, "1", nil, params )
 		elseif ( direction == "down" ) then
-			return Device.setStatus( deviceId, "0", nil, noAction )
+			return Device.setStatus( deviceId, "0", nil, params )
 		elseif ( direction == "stop" ) then
 			-- TODO : problème avec sens ?
-			local equipment = Equipments.getFromDeviceId( deviceId )
+			local equipment, mapping = Equipments.getFromDeviceId( deviceId )
 			if ( equipment.protocol == "RTS" ) then
 				-- "My" fonction for RTS
-				if ( feature.settings.receiver and not ( noAction == true ) ) then
+				if ( mapping.device.settings.receiver and not ( params.noAction == true ) ) then
 					debug( "RTS 'My' function", "Device.moveShutter" )
-					local burst = feature.settings.burst and ( " BURST " .. feature.settings.burst ) or ""
+					local loadLevel = mapping.device.settings.my or "50"
+					Device.setLoadLevel( deviceId, loadLevel, { noAction = true } )
+					local burst = mapping.device.settings.burst and ( " BURST " .. mapping.device.settings.burst ) or ""
 					Network.send( "ZIA++DIM RTS ID " .. equipment.id .. " %4 QUALIFIER 0" .. burst )
 				end
 			else
@@ -1528,49 +1741,76 @@ Device = {
 		end
 	end,
 
-	-- Set HVAC Mode Status
-	setModeStatus = function( deviceId, newModeStatus, option )
-debug( "test", "Device.setModeStatus" )
-		local cmd = "ON"
-		local param = "7"
-		if ( option == "PilotWire" ) then
-			if ( newModeStatus == "0" ) then
-				-- Shutdown
-				cmd = "OFF"
-				param = "4"
-			elseif ( newModeStatus == "1" ) then
-				-- Frost free
-				param = "5"
-			elseif ( newModeStatus == "2" ) then
-				-- Economy
-				param = "0"
-			elseif ( newModeStatus == "3" ) then
-				-- Comfort
-				param = "3"
-			end
-			Variable.set( deviceId, "PILOTWIRE_STATUS", newModeStatus )
-		else
-			if ( newModeStatus == "Off" ) then
-				cmd = "OFF"
-				param = "4"
-			elseif ( newModeStatus == "HeatOn" ) then
-				param = "7"
-			end
-			Variable.set( deviceId, "HVAC_MODE_STATUS", newModeStatus )
-		end
-		debug( "Device #" .. tostring( deviceId ) .. " set mode status " .. tostring(newModeStatus), "Device.setModeStatus" )
+	setHVACFanOperatingMode = function( deviceId, mode, params )
+		local params = params or {}
+		debug( "Device #" .. tostring( deviceId ) .. " set operating mode '" .. tostring(mode) .. "'", "Device.setHVACFanOperatingMode" )
+		Variable.set( deviceId, "HVAC_FAN_OPERATING_MODE", mode )
+		-- Auto, ContinuousOn, PeriodicOn
 
 		-- Send command if needed
-		local equipment, feature, device = Equipments.getFromDeviceId( deviceId )
-		if device.settings.receiver then
-		-- TODO
-			Network.send( "ZIA++" .. cmd  .. " " .. equipment.protocol .. " ID " .. equipment.id .. " %" .. param )
+		local equipment, mapping = Equipments.getFromDeviceId( deviceId )
+		if ( mapping.device.settings.receiver and not ( params.noAction == true ) ) then
+			Equipment.setHVACFanOperatingMode( equipment, mode )
 		end
 	end,
 
-	-- Set HVAC SetPoint
-	setSetPoint = function( equipment, feature, newSetpoint, option )
-	
+	setHVACOperatingMode = function( deviceId, mode, params )
+		local params = params or {}
+		local equipment, mapping = Equipments.getFromDeviceId( deviceId )
+
+		if ( mapping.device.typeName == "PILOT_WIRE" ) then
+			-- Specific to Pilot Wire (using Qubino static JSON file)
+			if params.isLoadLevel then
+				local LOADLEVEL_TO_OPERATING_MODE = {
+					[ "0" ]  = "Off",
+					[ "11" ] = "OutOfFrost",
+					[ "21" ] = "Eco",
+					[ "31" ] = "Comfort2",
+					[ "41" ] = "Comfort1",
+					[ "51" ] = "Comfort"
+				}
+				Variable.set( deviceId, "DIMMER_LEVEL", mode )
+				mode = LOADLEVEL_TO_OPERATING_MODE[mode] or "Off"
+			else
+				local OPERATING_MODE_TO_LOADLEVEL = {
+					[ "Off" ]        = "0",
+					[ "OutOfFrost" ] = "11",
+					[ "Eco" ]        = "21",
+					[ "Comfort2" ]   = "31",
+					[ "Comfort1" ]   = "41",
+					[ "Comfort" ]    = "51"
+				}
+				Variable.set( deviceId, "DIMMER_LEVEL", OPERATING_MODE_TO_LOADLEVEL[mode] or "0" )
+			end
+		end
+		debug( "Device #" .. tostring( deviceId ) .. " - Set operating mode '" .. tostring(mode) .. "'", "Device.setHVACOperatingMode" )
+		Variable.set( deviceId, "HVAC_OPERATING_MODE", mode )
+		-- Off, AutoChangeOver, CoolOn, HeatOn
+
+		-- Send command if needed
+		if ( mapping.device.settings.receiver and not ( params.noAction == true ) ) then
+			Equipment.setHVACOperatingMode( equipment, mode )
+		end
+	end,
+
+	setSetPoint = function( deviceId, setPoint, option, params )
+		local params = params or {}
+		if ( option == "Heat" ) then
+			debug( "Device #" .. tostring( deviceId ) .. " - Set setPoint to " .. tostring(setPoint) .. " (HEAT)", "Device.setHVACOperatingMode" )
+			Variable.set( deviceId, "HVAC_CURRENT_SETPOINT_HEAT", setPoint )
+		elseif ( option == "Cool" ) then
+			debug( "Device #" .. tostring( deviceId ) .. " - Set setPoint to " .. tostring(setPoint) .. " (COOL)", "Device.setHVACOperatingMode" )
+			Variable.set( deviceId, "HVAC_CURRENT_SETPOINT_COOL", setPoint )
+		else
+			debug( "Device #" .. tostring( deviceId ) .. " - Set setPoint to " .. tostring(setPoint), "Device.setHVACOperatingMode" )
+			Variable.set( deviceId, "HVAC_CURRENT_SETPOINT", setPoint )
+		end
+
+		-- Send command if needed
+		local equipment, mapping = Equipments.getFromDeviceId( deviceId )
+		if ( mapping.device.settings.receiver and not ( params.noAction == true ) ) then
+			Equipment.setSetPoint( equipment, setPoint, option )
+		end
 	end
 }
 
@@ -1582,99 +1822,64 @@ debug( "test", "Device.setModeStatus" )
 local _commandsToProcess = {}
 local _isProcessingCommand = false
 
-Command = {
+Commands = {
 
-	process = function( source, qualifier, data )
-		local header = data.frame.header
-		local infos = data.frame.infos
-		local protocol = header.protocolMeaning
-		local equipmentId = infos.id or infos.adr_channel
-		local equipmentInfos = {
-			infoType = header.infoType,
-			subType = infos.subType,
-			frequency = ( ( header.dataFlag ~= "-1 " ) and tostring( ZIBLUE_FREQUENCY[ header.dataFlag ] ) or "" ),
-			quality = tonumber( header.rfQuality )
-		}
-		local isOk = true
-
-		-- Battery
-		if ( infos.lowBatt == "1" ) then
-			--_addCommand( "lowbatt", "lowbatt" )
-			isOk = Command.add( protocol, equipmentId, equipmentInfos, "lowbatt", "lowbatt" ) and isOk
-		end
-		-- State
-		if ( infos.subTypeMeaning ) then
-			isOk = Command.add( protocol, equipmentId, equipmentInfos, "state", infos.subTypeMeaning, infos.subTypeMeaning ) and isOk
-		end
-		-- Measures
-		if ( infos.measures ) then
-			for _, measure in ipairs( infos.measures ) do
-				isOk = Command.add( protocol, equipmentId, equipmentInfos, measure.type, measure.type, measure ) and isOk
-			end
-		end
-		-- Flags (can be "LowBatt")
-		if ( infos.qualifierMeaning and infos.qualifierMeaning.flags ) then
-			for _, flag in ipairs( infos.qualifierMeaning.flags ) do
-				isOk = Command.add( protocol, equipmentId, equipmentInfos, flag, flag ) and isOk
-			end
-		end
-
+	process = function()
 		if ( #_commandsToProcess > 0 ) then
-			luup.call_delay( _NAME ..".Command.deferredProcess", 0 )
+			luup.call_delay( _NAME .. ".Commands.deferredProcess", 0 )
 		end
-
-		return isOk
 	end,
 
-	add = function( protocol, equipmentId, equipmentInfos, featureName, commandName, data )
-		commandName, featureName = string.lower(commandName or ""), string.lower(featureName or "")
-		local id = protocol .. ";" .. equipmentId
-		local msg = "Equipment '" .. id .. "'"
-		if string_isEmpty(featureName) then
-			error( msg .. " : no given feature", "Command.process" )
+	add = function( protocol, equipmentId, address, endpointId, infos, cmd )
+		cmd.name = string.lower(cmd.name or "")
+		local msg = "Equipment " .. Tools.getEquipmentInfo( protocol, equipmentId, address, endpointId )
+		if string_isEmpty(cmd.name) then
+			error( msg .. " : no given command", "Commands.add" )
 			return false
 		end
-		if string_isEmpty(commandName) then
-			error( msg .. " : no given command", "Command.process" )
-			return false
-		end
-		local equipment, feature, devices = Equipments.get( protocol, equipmentId, featureName )
+		local equipment, feature, devices = Equipments.get( protocol, equipmentId, address, ( cmd.broadcast == true and "all" or endpointId ), cmd.name ) -- cmd.name = feature
 		if equipment then
-			equipment.frequency = equipmentInfos.frequency
-			equipment.quality = equipmentInfos.quality
+			equipment.frequency = infos.frequency
+			equipment.quality = infos.quality
+			if string_isEmpty(equipmentId) then
+				equipmentId = equipment.id
+				msg = "Equipment " .. Tools.getEquipmentInfo( protocol, equipmentId, address, endpointId )
+			end
 			if equipment.isNew then
 				-- No command on a new equipment (not yet handled by the home automation controller)
-				return
+				debug( msg .. " is new : do nothing", "Commands.add" )
+				return true
 			end
 			if feature then
 				-- Equipment is known for this feature
-				if ( type( data ) == "table" ) then
-					feature.state = data.value .. " " .. data.unit
-				elseif ( data ~= nil ) then
-					feature.state = data
-				end
+				cmd.elapsedTime = os.difftime( os.time(), feature.lastUpdate or os.time() )
+				cmd.lastData = feature.data
+				feature.data = cmd.data
+				feature.unit = cmd.unit
 				feature.lastUpdate = os.time()
 				equipment.lastUpdate = os.time()
-				table.insert( _commandsToProcess, { devices, commandName, data } )
+				table.insert( _commandsToProcess, { devices, cmd } )
 			else
 				-- Equipment is known (but not for this feature)
-				if ( commandName == "lowbatt" ) then
-					Device.setBatteryLevel( equipment.mainDeviceId, 10 )
+				if ( cmd.name == "battery" ) then
+					Device.setBatteryLevel( equipment.mainDeviceId, cmd.data )
 				end
 			end
 		end
 
-		-- TODO : surement un pb avec la feature status sans devicetype
-		if ( ( featureName ~= "lowbatt" ) and ( not equipment or not feature ) ) then
-			-- Add this device to the discovered equipments (but not yet known)
-			local hasBeenAdded, isFeatureKnown = DiscoveredEquipments.add( protocol, equipmentId, equipmentInfos, featureName, data )
+		if ( not cmd.broadcast and ( cmd.name ~= "battery" ) and ( not equipment or not feature ) ) then
+			-- Add this equipment or feature to the discovered equipments (but not yet known)
+			msg = msg .. ",(command:" .. cmd.name .. ")"
+			local hasBeenAdded, hasCapabilityBeenAdded, isFeatureKnown = DiscoveredEquipments.add( protocol, equipmentId, address, endpointId, infos, cmd.name, cmd.data, cmd.unit )
 			if hasBeenAdded then
-				debug( msg .. ": unknown for feature '" .. featureName .. "'", "Command.process" )
+				debug( msg .. " was unknown", "Commands.add" )
+			elseif hasCapabilityBeenAdded then
+				debug( msg .. " was unknown for this command", "Commands.add" )
 			elseif not isFeatureKnown then
-				error( msg .. ": feature '" .. featureName .. "' is not known", "Command.process" )
+				error( msg .. ": feature '" .. cmd.name .. "' is not known", "Commands.add" )
 				return false
 			else
-				debug( msg .. ": already discovered", "Command.process" )
+				debug( msg .. " is already discovered", "Commands.add" )
 			end
 		end
 		return true
@@ -1682,14 +1887,14 @@ Command = {
 
 	deferredProcess = function()
 		if _isProcessingCommand then
-			debug( "Processing is already in progress", "Command.deferredProcess" )
+			debug( "Processing is already in progress", "Commands.deferredProcess" )
 			return
 		end
 		_isProcessingCommand = true
 		while _commandsToProcess[1] do
-			local status, err = pcall( Command.protectedProcess )
+			local status, err = pcall( Commands.protectedProcess )
 			if err then
-				error( "Error: " .. tostring( err ), "Command.deferredProcess" )
+				error( "Error: " .. tostring( err ), "Commands.deferredProcess" )
 			end
 			table.remove( _commandsToProcess, 1 )
 		end
@@ -1697,21 +1902,25 @@ Command = {
 	end,
 
 	protectedProcess = function()
-		local devices, commandName, data = unpack( _commandsToProcess[1] )
+		local devices, cmd = unpack( _commandsToProcess[1] )
 		for _, device in pairs( devices ) do
 			local msg = "Device #" .. tostring(device.id)
-			local deviceInfos, deviceType = Device.getInfos( device.id )
+			--local deviceInfos = Device.getInfos( device.id )
+			local deviceInfos = Device.getInfos( device.typeName )
 			if ( deviceInfos == nil ) then
-				error( msg .. " - Type is unknown", "Command.protectedProcess" )
-			elseif ( deviceInfos.commands[ commandName ] ~= nil ) then
-				if ( type(data) == "table" ) then
-					debug( msg .. " - Do command '" .. commandName .. "' with data '" .. json.encode(data) .. "'", "Command.protectedProcess" )
+				error( msg .. " - Type is unknown", "Commands.protectedProcess" )
+			elseif ( deviceInfos.commands[ cmd.name ] ~= nil ) then
+				if ( type(cmd.data) == "table" ) then
+					debug( msg .. " - Do command '" .. cmd.name .. "' with data '" .. json.encode(cmd.data) .. "'", "Commands.protectedProcess" )
 				else
-					debug( msg .. " - Do command '" .. commandName .. "' with data '" .. tostring(data) .. "'", "Command.protectedProcess" )
+					debug( msg .. " - Do command '" .. cmd.name .. "' with data '" .. tostring(cmd.data) .. "'", "Commands.protectedProcess" )
 				end
-				deviceInfos.commands[ commandName ]( device.id, data )
+				deviceInfos.commands[ cmd.name ]( device.id, cmd.data, { unit = cmd.unit, lastData = cmd.lastData, elapsedTime = cmd.elapsedTime } )
+				if cmd.info then
+					Variable.set( device.id, "LAST_INFO", cmd.info )
+				end
 			else
-				warning( msg .. " - Command '" .. commandName .. "' not yet implemented for this device type " .. deviceType, "Command.protectedProcess" )
+				warning( msg .. " - Command '" .. cmd.name .. "' not yet implemented for this device type " .. tostring(deviceInfos.type), "Commands.protectedProcess" )
 			end
 		end
 	end
@@ -1727,6 +1936,16 @@ local _isSendingMessage = false
 local _lastNetworkReceiveTime = 0
 local _lastNetworkSendTime = 0
 
+local _isMeasureValid = function( measure )
+	if ( ( measure.type == "hygrometry" ) and ( measure.value == "0" ) ) then
+		return false
+	end
+	if ( ( measure.type == "temperature" ) and ( measure.value == "-0.0" ) ) then
+		return false
+	end
+	return true
+end
+
 Network = {
 
 	receive = function( lul_data )
@@ -1734,47 +1953,152 @@ Network = {
 			_lastNetworkReceiveTime = os.time()
 			local sync = string.sub( lul_data, 1, 2 )
 			if ( sync == "ZI" ) then
-				local data
 				local source = string.sub( lul_data, 3, 3 )
 				local qualifier = string.sub( lul_data, 4, 5 )
-				local jsonData = string.gsub( string.sub( lul_data, 6 ), '[%c]', '' ) -- Data without the terminator
+				local data = string.gsub( string.sub( lul_data, 6 ), '[%c]', '' ) -- Data without the terminator
 
-				if ( string.sub( jsonData, 1, 1 ) == "{" ) then
-					local decodeSuccess, data, _, jsonError = pcall( json.decode, jsonData )
+				if ( ( qualifier == "33" ) or ( ( qualifier == "--" ) and ( string.sub( data, 1, 1 ) == "{" ) ) ) then
+					-- JSON
+					local decodeSuccess, data, _, jsonError = pcall( json.decode, data )
 					if ( decodeSuccess and data ) then
-						debug( source .. " " .. qualifier .. ": " .. json.encode( data ), "Network.receive" )
+						debug( "<-- " .. source .. " " .. qualifier .. ": " .. json.encode( data ), "Network.receive" )
 						if data.systemStatus then
-							_settings.system = Tools.extractInfos( data.systemStatus.info )
+							SETTINGS.system = Tools.extractInfos( data.systemStatus.info, "system" )
 							-- Special feature : JAMMING
-							local filteredSettings = table_filter( _settings.system, function(i, setting) return ( setting.name == "Jamming" ) end )
-							if ( ( #filteredSettings > 0 ) and not Equipments.get( "JAMMING", "0") ) then
+							local filteredSettings = table_filter( SETTINGS.system, function(i, setting) return ( setting.name == "Jamming" ) end )
+							if ( ( #filteredSettings > 0 ) and not Equipments.get( "JAMMING", "0" ) ) then
 								local comment = ( tonumber(filteredSettings[1].value or 0) == 0 ) and "Jamming detection feature is not activated" or ""
-								DiscoveredEquipments.add( "JAMMING", "0", { infoType = "1" }, "state", "1", comment )
+								DiscoveredEquipments.add( "JAMMING", "0", nil, nil, { infoType = "1" }, "state", "1", nil, comment )
 							end
 						elseif data.radioStatus then
-							_settings.radio = Tools.extractInfos( data.radioStatus.band )
+							SETTINGS.radio = Tools.extractInfos( data.radioStatus.band, "radio" )
 						elseif data.parrotStatus then
 							Tools.updateParrotStatus( data.parrotStatus.info )
-						elseif not Command.process( source, qualifier, data ) then
+						elseif not Network.processFrame( source, qualifier, data ) then
+						--elseif not Tools.pcall( Network.processFrame, source, qualifier, data )
 							error( "Error with RF frame: " .. tostring(lul_data), "Network.receive" )
+						else
+							Commands.process()
 						end
 					else
-						error( "JSON error: " .. tostring( jsonError ), "Network.receive" )
+						error( "<-- JSON error: " .. tostring( jsonError ), "Network.receive" )
 					end
+				elseif ( qualifier == "66" ) then
+					-- EDISIOFRAME
+					-- TODO
+					data = string.sub( data, 14 )
+					debug( "<-- Edisio frame: '" .. tostring( data ) .. "'", "Network.receive" )
 				else
-					if ( jsonData == "PONG" ) then
+					if ( data == "PONG" ) then
 						debug( _NAME .. " is alive", "Network.receive" )
-					elseif ( string.sub( jsonData, 1, 7 ) == "Welcome" ) then
-						debug( "Welcome: " .. jsonData, "Network.receive" )
+					elseif ( string.sub( data, 1, 7 ) == "Welcome" ) then
+						debug( "Welcome: " .. data, "Network.receive" )
 					else
-						error( "Unkown message: '" .. tostring( jsonData ) .. "'", "Network.receive" )
+						error( "<-- Unknown message: " .. qualifier .. "'" .. tostring( data ) .. "'", "Network.receive" )
 					end
 				end
 
 			else
-				debug( "Unkown data: '" .. tostring( lul_data ) .. "'", "Network.receive" )
+				if ( lul_data == "Port already in use" ) then
+					error( "<-- Port already in use", "Network.receive" )
+				else
+					debug( "<-- Unknown data: " .. string_toHex( lul_data ), "Network.receive" )
+				end
 			end
 		end
+	end,
+
+	processFrame = function( source, qualifier, data )
+		local frameHeader = data.frame.header
+		local frameInfos = data.frame.infos
+		local protocol = frameHeader.protocolMeaning
+		local infoType = frameHeader.infoType
+		local equipmentId = frameInfos.id or frameInfos.adr_channel
+		if string_isEmpty(equipmentId) then
+			warning( "equipmentId can not be empty", "Network.processFrame" )
+			return true
+		end
+		if ( ( protocol ~= "JAMMING" ) and ( protocol ~= "PARROT" ) and ( tonumber(equipmentId) == 0 ) ) then
+			warning( "equipmentId has to be greater than 0", "Network.processFrame" )
+			return true
+		end
+		local infos = {
+			infoType = frameHeader.infoType,
+			subType = frameInfos.subType,
+			frequency = ( ( frameHeader.dataFlag ~= "-1 " ) and tostring( ZIBLUE_FREQUENCY[ frameHeader.dataFlag ] ) or "" ),
+			quality = tonumber( frameHeader.rfQuality )
+		}
+		local endpointId
+		local isOk = true
+
+		if frameInfos.area then
+			endpointId = string_lpad( frameInfos.area or "01", 2, "0" )
+		end
+
+		if ( protocol == "EDISIO" ) then
+			equipmentId = string_toHex( number_toBytes( tonumber(equipmentId), "little", false ) )
+			endpointId = string_lpad( frameInfos.qualifier or "01", 2, "0" ) -- Edisio channel
+			debug( "modelId : " .. frameInfos.info, "Network.processFrame" )
+			local info = tonumber(frameInfos.info) or 0
+			infos.modelId = bit.band( info, 0xFF )
+			debug( "modelId : " .. number_toHex( infos.modelId ), "Network.process" )
+			if ( frameInfos.subTypeMeaning == "SET_TEMPERATURE" ) then
+				frameInfos.measures = {
+					{
+						type = "temperature",
+						value = ( tonumber(frameInfos.add0) or 0 ) / 100,
+						unit = "Celsius"
+					}
+				}
+				frameInfos.subTypeMeaning = nil
+			end
+			--  3.6V is 100%, 2.6V is 0%
+			local batteryLevel = math.ceil((math.floor(info / 254) - 26) * 10)
+			debug( "batteryLevel : " .. number_toHex( batteryLevel ), "Network.process" )
+			isOk = Commands.add( protocol, equipmentId, nil, endpointId, infos, { name = "battery", data = batteryLevel, unit = "%" } ) and isOk
+		end
+
+		local equipInfos = _getEquipmentInfos( protocol, infos.infoType, infos.subType, infos.modelId )
+		infos.capability = { name = equipInfos.name, modelings = equipInfos.modelings }
+		debug( "capability : " .. json.encode( infos.capability ), "Network.process" )
+
+		-- Battery
+		if ( frameInfos.lowBatt == "1" ) then
+			isOk = Commands.add( protocol, equipmentId, nil, endpointId, infos, { name = "battery", data = 10, unit = "%" } ) and isOk
+		end
+
+		-- State (or model name)
+		if ( frameInfos.subTypeMeaning ) then
+			isOk = Commands.add( protocol, equipmentId, nil, endpointId, infos, { name = "state", data = frameInfos.subTypeMeaning } ) and isOk
+		end
+
+		-- Function (specific to X2DELEC and X2DGAS)
+		if ( frameInfos.functionMeaning and frameInfos.stateMeaning ) then
+			infos.modelName = frameInfos.subTypeMeaning
+			isOk = Commands.add( protocol, equipmentId, nil, endpointId, infos, { name = frameInfos.functionMeaning, data = frameInfos.stateMeaning } ) and isOk
+		end
+
+		-- Measures
+		if ( frameInfos.measures ) then
+			for _, measure in ipairs( frameInfos.measures ) do
+				if _isMeasureValid( measure ) then
+					isOk = Commands.add( protocol, equipmentId, nil, endpointId, infos, { name = measure.type, data = measure.value, unit = measure.unit } ) and isOk
+				end
+			end
+		end
+
+		-- Flags (can be "LowBatt")
+		if ( frameInfos.qualifierMeaning and frameInfos.qualifierMeaning.flags ) then
+			for _, flag in ipairs( frameInfos.qualifierMeaning.flags ) do
+				if ( flag == "LowBatt") then
+					isOk = Commands.add( protocol, equipmentId, nil, endpointId, infos, { name = "battery", data = 10, unit = "%" } ) and isOk
+				else
+					isOk = Commands.add( protocol, equipmentId, nil, endpointId, infos, { name = flag } ) and isOk
+				end
+			end
+		end
+
+		return isOk
 	end,
 
 	getLastReceiveTime = function()
@@ -1822,7 +2146,7 @@ Network = {
 				return
 			else
 				--debug( "Send message: ".. string.formatToHex(_messageToSendQueue[1]), "Network.send" )
-				debug( "Send message: " .. message, "Network.send" )
+				debug( "--> " .. message, "Network.send" )
 				_lastNetworkSendTime = os.time()
 				if not luup.io.write( message ) then
 					error( "Failed to send packet", "Network.send" )
@@ -1845,15 +2169,16 @@ Network = {
 local _isPollingActivated = false
 
 PollEngine = {
-	start = function ()
+	start = function()
 		log( "Start poll", "PollEngine.start" )
 		_isPollingActivated = true
-		PollEngine.poll()
+		luup.call_delay( _NAME .. ".PollEngine.poll", SETTINGS.plugin.pollInterval )
 	end,
 
-	poll = function ()
+	poll = function()
 		if _isPollingActivated then
-			if ( os.difftime( Network.getLastReceiveTime(), os.time() ) > _settings.plugin.pollInterval * 2 ) then
+		-- TODO : check if it works
+			if ( os.difftime( Network.getLastReceiveTime(), os.time() ) > SETTINGS.plugin.pollInterval * 2 ) then
 				log( "Last receive is too old : there's a communication problem", "PollEngine.poll" )
 				luup.set_failure( 1, DEVICE_ID )
 			elseif ( Variable.get( DEVICE_ID, "COMM_FAILURE" ) == "1" ) then
@@ -1862,7 +2187,7 @@ PollEngine = {
 			debug( "Poll", "PollEngine.poll" )
 			Network.send( "ZIA++PING" )
 			-- Prepare next polling
-			luup.call_delay( _NAME .. ".PollEngine.poll", _settings.plugin.pollInterval )
+			luup.call_delay( _NAME .. ".PollEngine.poll", SETTINGS.plugin.pollInterval )
 		end
 	end
 }
@@ -1883,16 +2208,36 @@ Tools = {
 		end
 	end,
 
-	getProductInfo = function( equipment, features )
-		if features then
-			return equipment.protocol .. ";" .. equipment.id .. ";" .. table.concat( table_getKeys( features ), "," )
-		else
-			return equipment.protocol .. ";" .. equipment.id
+	getEquipmentInfo = function( protocol, equipmentId, address, endpointId, featureNames, deviceId )
+		local info = "(protocol:" .. protocol .. "),(id:" .. tostring(equipmentId) ..")"
+		if not string_isEmpty(address) then
+			info = info .. ",(address:" .. tostring(address) .. ")"
 		end
+		if not string_isEmpty(endpointId) then
+			info = info .. ",(endpointId:" .. tostring(endpointId) .. ")"
+		end
+		if ( type(featureNames) == "table" ) then
+			info = info .. ",(features:" .. table.concat( featureNames, "," ) .. ")"
+		end
+		if deviceId then
+			info = info .. ",(deviceId:" .. tostring( deviceId ) .. ")"
+		end
+		return info
 	end,
 
-	extractInfos = function( infos )
+	getEquipmentSummary = function( equipment, mapping )
+		local info
+		if mapping then
+			info = Tools.getEquipmentInfo( equipment.protocol, equipment.id, equipment.address, mapping.endpointId, table_getKeys( mapping.features ), mapping.device.id )
+		else
+			info = Tools.getEquipmentInfo( equipment.protocol, equipment.id, equipment.address )
+		end
+		return info
+	end,
+
+	extractInfos = function( infos, path )
 		local result = {}
+		local path = path or ""
 		for _, info in ipairs( infos ) do
 			if not string_isEmpty( info.n ) then
 				local item = {
@@ -1906,12 +2251,30 @@ Tools = {
 					item.comment = info.c
 				end
 				table.insert( result, item )
+				local infoPath = path .. "." .. string.lower( tostring(item.name) )
+				if ZIBLUE_SETTINGS[infoPath] then
+					table_extend( item, ZIBLUE_SETTINGS[infoPath] )
+				end
 			elseif info.i then
-				table.insert( result, Tools.extractInfos( info.i ) )
+				table.insert( result, Tools.extractInfos( info.i, path .. "." .. tostring(#result) ) )
 			elseif info.p then
 				table.insert( result, info.p )
+			elseif info.transmitter then
+				table.insert( result, { name = "transmitter-available", value = table.concat( info.transmitter.available.p, "," ) } )
+			elseif info.receiver then
+				if info.receiver.available then
+					table.insert( result, { name = "receiver-available", value = table.concat( info.receiver.available.p, "," ) } )
+				elseif info.receiver.enabled then
+					table.insert( result, { name = "receiver-enabled", value = table.concat( info.receiver.enabled.p, "," ) } )
+				end
+			elseif info.repeater then
+				if info.repeater.available then
+					table.insert( result, { name = "repeater-available", value = table.concat( info.repeater.available.p, "," ) } )
+				elseif info.repeater.enabled then
+					table.insert( result, { name = "repeater-enabled", value = table.concat( info.repeater.enabled.p, "," ) } )
+				end
 			else
-				table.insert( result, info )
+				table.insert( result )
 			end
 		end
 		debug( "Result:" .. json.encode( result ), "Tools.extractInfos" )
@@ -1920,10 +2283,13 @@ Tools = {
 
 	updateParrotStatus = function( infos )
 		local status = Tools.extractInfos( infos )
+		-- TODO
+		--[[
 		if not Equipments.get( "PARROT", status.id ) then
 			-- Add the Parrot device to discovered devices
-			DiscoveredEquipments.add( "PARROT", status.id, { infoType = "0" }, "state", ( ( status.action == "1" ) and "ON" or "OFF" ), status.reminder )
+			DiscoveredEquipments.add( "PARROT", status.id, nil, nil, { infoType = "0" }, "state", ( ( status.action == "1" ) and "ON" or "OFF" ), nil, status.reminder )
 		end
+		--]]
 	end,
 
 	pcall = function( method, ... )
@@ -1932,6 +2298,26 @@ Tools = {
 			error( "Error: " .. tostring( result ), "Tools.pcall" )
 		end
 		return isOk, result
+	end,
+
+	getSettings = function( encodedSettings )
+		local settings = {}
+		for _, encodedSetting in ipairs( string_split( encodedSettings or "", "," ) ) do
+			local settingName, operator, value = string.match( encodedSetting, "([^=]*)(=?)(.*)" )
+			if not string_isEmpty( settingName ) then
+				-- Backward compatibility
+				if ( settingName == "pulse" ) then
+					settingName = "momentary"
+				end
+				if ( operator == "=" ) then
+					value = tonumber(value) or value or ""
+				else
+					value = true
+				end
+				settings[ settingName ] = value
+			end
+		end
+		return settings
 	end
 
 }
@@ -1942,10 +2328,11 @@ Tools = {
 -- **************************************************
 
 Association = {
-	-- Get association from string
-	get = function( strAssociation )
+	-- Get association of a device
+	get = function( deviceId )
 		local association = {}
-		for _, encodedAssociation in pairs( string_split( strAssociation or "", "," ) ) do
+		local encodedAssociations = string_split( Variable.get( deviceId, "ASSOCIATION" ) or "", "," )
+		for _, encodedAssociation in pairs( encodedAssociations ) do
 			local linkedId, level, isScene, isEquipment = nil, 1, false, false
 			while ( encodedAssociation ) do
 				local firstCar = string.sub( encodedAssociation, 1 , 1 )
@@ -1968,31 +2355,31 @@ Association = {
 			end
 			if linkedId then
 				if isScene then
-					if ( luup.scenes[ linkedId ] ) then
+					if luup.scenes[ linkedId ] then
 						if ( association.scenes == nil ) then
 							association.scenes = { {}, {} }
 						end
 						table.insert( association.scenes[ level ], linkedId )
 					else
-						error( "Associated scene #" .. tostring( linkedId ) .. " is unknown", "Association.get" )
+						error( "Associated scene #" .. tostring( linkedId ) .. " is unknown for device #" .. tostring(deviceId), "Association.get" )
 					end
 				elseif isEquipment then
-					if ( luup.devices[ linkedId ] ) then
+					if luup.devices[ linkedId ] then
 						if ( association.equipments == nil ) then
 							association.equipments = { {}, {} }
 						end
 						table.insert( association.equipments[ level ], linkedId )
 					else
-						error( "Associated equipment #" .. tostring( linkedId ) .. " is unknown", "Association.get" )
+						error( "Associated equipment #" .. tostring( linkedId ) .. " is unknown for device #" .. tostring(deviceId), "Association.get" )
 					end
 				else
-					if ( luup.devices[ linkedId ] ) then
+					if luup.devices[ linkedId ] then
 						if ( association.devices == nil ) then
 							association.devices = { {}, {} }
 						end
 						table.insert( association.devices[ level ], linkedId )
 					else
-						error( "Associated device #" .. tostring( linkedId ) .. " is unknown", "Association.get" )
+						error( "Associated device #" .. tostring( linkedId ) .. " is unknown for device #" .. tostring(deviceId), "Association.get" )
 					end
 				end
 			end
@@ -2072,84 +2459,116 @@ Association = {
 -- **************************************************
 
 local _discoveredEquipments = {}
-local _indexDiscoveredEquipmentsById = {}
+local _indexDiscoveredEquipmentsByProtocolEquipmentId = {}
+local _indexDiscoveredEquipmentsByProtocolAddress = {}
 
 DiscoveredEquipments = {
 
-	add = function( protocol, equipmentId, equipmentInfos, featureName, data, comment )
+	add = function( protocol, equipmentId, address, endpointId, infos, featureName, data, unit, comment )
 		local hasBeenAdded = false
-		local id = protocol .. ";" .. equipmentId
+		if ( string_isEmpty(equipmentId) and string_isEmpty(address) ) then
+			error( "equipmentId or address has to be set", "DiscoveredEquipments.add" )
+			return false
+		end
+		local discoveredEquipment
+		if not string_isEmpty(equipmentId) then
+			discoveredEquipment = _indexDiscoveredEquipmentsByProtocolEquipmentId[ protocol .. ";" .. equipmentId ]
+		elseif not string_isEmpty(address) then
+			discoveredEquipment = _indexDiscoveredEquipmentsByProtocolAddress[ protocol .. ";" .. address ]
+		end
 		-- Add discovered equipment if not already known
-		local discoveredEquipment = _indexDiscoveredEquipmentsById[ id ]
 		if ( discoveredEquipment == nil ) then
-			local ziblueInfos = _getZiBlueInfos( protocol, equipmentInfos.infoType, equipmentInfos.subType )
 			discoveredEquipment = {
-				name = ziblueInfos.name,
 				protocol = protocol,
-				frequency = ( ( dataFlag ~= "-1 " ) and tostring( ZIBLUE_FREQUENCY[ dataFlag ] ) or "" ),
-				id = equipmentId,
+				frequency = infos.frequency,
 				comment = comment,
-				modelings = table_extend( {}, ziblueInfos.modelings ) -- Clone the modelings
+				capabilities = {}
 			}
 			table.insert( _discoveredEquipments, discoveredEquipment )
-			_indexDiscoveredEquipmentsById[ id ] = discoveredEquipment
+			if not string_isEmpty(equipmentId) then
+				discoveredEquipment.id = equipmentId
+				_indexDiscoveredEquipmentsByProtocolEquipmentId[ protocol .. ";" .. equipmentId ] = discoveredEquipment
+			end
+			if not string_isEmpty(address) then
+				discoveredEquipment.address = address
+				_indexDiscoveredEquipmentsByProtocolAddress[ protocol .. ";" .. address ] = discoveredEquipment
+			end
 			hasBeenAdded = true
-			debug( "Discovered equipment '" .. id .. "'", "DiscoveredEquipments.add" )
+			debug( "New discovered equipment " .. Tools.getEquipmentSummary(discoveredEquipment), "DiscoveredEquipments.add" )
 		end
-		discoveredEquipment.quality = tonumber( equipmentInfos.quality )
-		-- Feature
-		local isFeatureKnown = false
-		for _, modeling in ipairs( discoveredEquipment.modelings ) do
-			for _, mapping in ipairs( modeling.mappings ) do
-				local feature = mapping.features[ featureName ]
-				if feature then
-					-- This mapping contains our feature
-					isFeatureKnown = true
-					mapping.isUsed = true
-					if ( type( data ) == "table" ) then
-						feature.state = data.value .. " " .. data.unit
-						if ( ( featureName == "hygrometry" ) and ( data.value == "0" ) ) then
-							mapping.isUsed = false
+		discoveredEquipment.quality = tonumber( infos.quality )
+
+		-- Capability
+		local isFeatureKnown, hasCapabilityBeenAdded = false, false
+		if infos.capability then
+			local capabilityName = ( not string_isEmpty(endpointId) and ( endpointId .. "-" ) or "" ) .. ( infos.capability.name or "Unknown" )
+			local capability = discoveredEquipment.capabilities[ capabilityName ]
+			if ( capability == nil ) then
+				capability = {
+					name = capabilityName,
+					endpointId = endpointId,
+					modelings = table_extend( {}, infos.capability.modelings ) -- Clone the modelings
+				}
+				discoveredEquipment.capabilities[ capabilityName ] = capability
+				hasCapabilityBeenAdded = true
+			end
+
+			if ( #capability.modelings > 0 ) then
+				-- Feature
+				for _, modeling in ipairs( capability.modelings ) do
+					for _, mapping in ipairs( modeling.mappings ) do
+						local feature = mapping.features[ featureName ]
+						if feature then
+							-- This mapping contains our feature
+							isFeatureKnown = true
+							if mapping.deviceTypes then
+								mapping.isUsed = true
+								feature.data = data
+								feature.unit = unit
+								modeling.isUsed = true
+							end
+							-- The features are unique in each modeling
+							break
 						end
-					else
-						feature.state = data
 					end
-					if mapping.isUsed then
-						modeling.isUsed = true
-					end
-					-- The features are unique in each modeling
-					break
 				end
+			else
+				capability.data = data
 			end
 		end
+
 		discoveredEquipment.lastUpdate = os.time()
 		if hasBeenAdded then
 			Variable.set( DEVICE_ID, "LAST_DISCOVERED", os.time() )
 			UI.show( "New equipment discovered" )
 		end
-		if isFeatureKnown then
-			debug( "Discovered equipment '" .. id .. "' and new feature '" .. featureName .. "'", "DiscoveredEquipments.add" )
+		if ( isFeatureKnown and hasCapabilityBeenAdded ) then
+			debug( "Discovered equipment " .. Tools.getEquipmentSummary(discoveredEquipment) .. " has a new feature '" .. featureName .. "'", "DiscoveredEquipments.add" )
 		end
-		return hasBeenAdded, isFeatureKnown
+		return hasBeenAdded, hasCapabilityBeenAdded, isFeatureKnown
 	end,
 
 	get = function( protocol, equipmentId )
-		if ( ( protocol ~= nil ) and ( equipmentId ~= nil ) ) then
-			local id = protocol .. ";" .. equipmentId
-			return _indexDiscoveredEquipmentsById[ id ]
+		if ( not string_isEmpty(protocol) and not string_isEmpty(equipmentId) ) then
+			local key = protocol .. ";" .. equipmentId
+			return _indexDiscoveredEquipmentsByProtocolEquipmentId[ key ]
 		else
 			return _discoveredEquipments
 		end
 	end,
 
 	remove = function( protocol, equipmentId )
-		if ( ( protocol ~= nil ) and ( equipmentId ~= nil ) ) then
-			local id = protocol .. ";" .. equipmentId
-			local discoveredEquipment = _indexDiscoveredEquipmentsById[ id ]
-			for i, device in ipairs( _discoveredEquipments ) do
-				if ( device == discoveredEquipment ) then
+		if ( not string_isEmpty(protocol) and not string_isEmpty(equipmentId) ) then
+			local key = protocol .. ";" .. equipmentId
+			local discoveredEquipment = _indexDiscoveredEquipmentsByProtocolEquipmentId[ key ]
+			for i, equipment in ipairs( _discoveredEquipments ) do
+				if ( equipment == discoveredEquipment ) then
+					local address = equipment.address
 					table.remove( _discoveredEquipments, i )
-					_indexDiscoveredEquipmentsById[ id ] = nil
+					_indexDiscoveredEquipmentsByProtocolEquipmentId[ key ] = nil
+					if address then
+						_indexDiscoveredEquipmentsByProtocolAddress[ protocol .. ";" .. address ] = nil
+					end
 					break
 				end
 			end
@@ -2163,98 +2582,92 @@ DiscoveredEquipments = {
 -- **************************************************
 
 local _equipments = {} -- The list of all our child devices
-local _indexEquipmentsById = {}
+local _indexEquipmentsByProtocolEquipmentId = {}
+local _indexEquipmentsByProtocolAddress = {}
 local _indexEquipmentsAndMappingsByDeviceId = {}
-local _indexFeaturesAndDevicesByIdAndFeatureName = {}
+local _indexFeaturesAndDevicesByProtocolEquipmentIdAndFeatureEndpoint = {}
+-- TODO : list device sinon crash
 
 Equipments = {
 
 	-- Get a list with all our child devices.
 	retrieve = function()
 		local formerEquipments = _equipments
-		local formerFeatures = _indexFeaturesAndDevicesByIdAndFeatureName
 		_equipments = {}
-		_indexEquipmentsById = {}
-		_indexEquipmentsAndMappingsByDeviceId = {}
-		_indexFeaturesAndDevicesByIdAndFeatureName = {}
+		Equipments.clearIndexes()
 		for deviceId, luDevice in pairs( luup.devices ) do
 			if ( luDevice.device_num_parent == DEVICE_ID ) then
 				local protocol, equipmentId, deviceNum = unpack( string_split( luDevice.id or "", ";" ) )
 				deviceNum = tonumber(deviceNum) or 1
 				if ( ( protocol == nil ) or ( equipmentId == nil ) or ( deviceNum == nil ) ) then
-					debug( "Found child device #".. tostring( deviceId ) .."(".. luDevice.description .."), but id '" .. tostring( device.id ) .. "' does not match pattern '[0-9]+;[0-9]+;[0-9]+'", "Equipments.retrieve" )
+					debug( "Found child device #".. tostring( deviceId ) .."(".. luDevice.description .."), but id '" .. tostring( luDevice.id ) .. "' does not match pattern '[0-9]+;[0-9]+;[0-9]+'", "Equipments.retrieve" )
 				else
+					-- Address
+					local address = Variable.get( deviceId, "ADDRESS" )
+					-- Endpoint
+					local endpointId = Variable.get( deviceId, "ENDPOINT" )
 					-- Features
 					local featureNames = string_split( Variable.get( deviceId, "FEATURE" ) or "default", "," )
 					-- Settings
-					local settings = {}
-					for _, encodedSetting in ipairs( string_split( Variable.get( deviceId, "SETTING" ) or "", "," ) ) do
-						local settingName, value = string.match( encodedSetting, "([^=]*)=?(.*)" )
-						if not string_isEmpty( settingName ) then
-							settings[ settingName ] = not string_isEmpty( value ) and value or true
-						end
-					end
+					local settings = Tools.getSettings( Variable.get( deviceId, "SETTING" ) )
 					-- Backward compatibility
 					if settings.button then
 						settings.transmitter = true
 						settings.button = nil
 					end
 					-- Association
-					association = Association.get( Variable.get( deviceId, "ASSOCIATION" ) )
+					association = Association.get( deviceId )
 					-- Add the device
-					Equipments.add( protocol, equipmentId, featureNames, deviceNum, luDevice.device_type, deviceId, luDevice.room_num, settings, association, false )
+					Equipments.add( protocol, equipmentId, address, endpointId, featureNames, deviceNum, luDevice.device_type, deviceId, luDevice.room_num, settings, association, false )
 				end
 			end
 		end
 
-		-- Retrieve former feature states
+		-- Retrieve former data
 		for _, formerEquipment in ipairs( formerEquipments ) do
-			local id = formerEquipment.protocol .. ";" .. formerEquipment.id
-			local equipment = _indexEquipmentsById[ id ]
+			local equipment = Equipments.get( formerEquipment.protocol, formerEquipment.id, formerEquipment.address )
 			if ( equipment ) then
-				for featureName, formerFeatureAndDevices in ipairs(formerFeatures[ id ]) do
-					local formerFeature = formerFeatureAndDevices[1]
-					local feature = _indexFeaturesAndDevicesByIdAndFeatureName[ id ][ featureName ]
-					if ( feature and formerFeature ) then
-						feature.state = formerFeature.state
+				-- This former equipment has been retrieved
+				formerEquipment.lastUpdate = equipment.lastUpdate
+				for _, formerMapping in ipairs( formerEquipment.mappings ) do
+					for _, formerFeature in ipairs( formerMapping.features ) do
+						local _, feature, devices = Equipments.get( formerEquipment.protocol, formerEquipment.id, formerEquipment.address, formerMapping.endpointId, formerFeature.featureName )
+						if feature then
+							feature.data = formerFeature.data
+							feature.lastUpdate = formerFeature.lastUpdate
+						end
 					end
 				end
 			elseif ( formerEquipment.isNew ) then
 				-- Add newly created Equipment (not present in luup.devices until a reload of the luup engine)
 				table.insert( _equipments, formerEquipment )
-				_indexEquipmentsById[ id ] = formerEquipment
-				_indexFeaturesAndDevicesByIdAndFeatureName[ id ] = {}
-				-- TODO
-				--[[
-				for _, feature in ipairs( formerEquipment.features ) do
-					_indexFeaturesAndDevicesByIdAndFeatureName[ id ][ feature.name ] = feature 
-				end
-				--]]
+				-- Add to indexes
+				Equipments.addToIndexes( formerEquipment )
 			end
 		end
 		formerEquipments = nil
-		formerFeature = nil
+
+		log("Found " .. tostring(#_equipments) .. " equipment(s)", "Equipments.retrieve")
 	end,
 
 	-- Add a device
-	add = function( protocol, equipmentId, featureNames, deviceNum, deviceType, deviceId, deviceRoomId, settings, association, isNew )
-		local id = tostring(protocol) .. ";" .. tostring(equipmentId)
-		--local deviceInfos = Device.getInfos( deviceType )
-		--local deviceTypeName = deviceInfos and deviceInfos.name or deviceType
+	add = function( protocol, equipmentId, address, endpointId, featureNames, deviceNum, deviceType, deviceId, deviceRoomId, settings, association, isNew )
+		local key = tostring(protocol) .. ";" .. tostring(equipmentId)
 		local deviceInfos = Device.getInfos( deviceId )
 		local deviceTypeName = deviceInfos and deviceInfos.name or "unknown"
-		debug( "Add equipment '" .. id .. "', features " .. json.encode( featureNames or "" ) .. ", device #" .. tostring(deviceId) .. ", type " .. deviceTypeName, "Equipments.add" )
+		debug( "Add equipment " .. Tools.getEquipmentInfo( protocol, equipmentId, address, endpointId, featureNames, deviceId ) .. ",(deviceNum:" .. tostring(deviceNum) .. "),(type:" .. deviceTypeName .. ")", "Equipments.add" )
 		local device = {
 			id = deviceId,
-			--type = deviceType,
+			typeName = deviceTypeName,
 			settings = settings or {},
 			association = association or {}
 		}
-		local equipment = _indexEquipmentsById[ id ]
+		local equipment = _indexEquipmentsByProtocolEquipmentId[ key ]
 		if ( equipment == nil ) then
 			equipment = {
 				protocol = protocol,
 				id = equipmentId,
+				address = address,
 				frequency = -1,
 				quality = -1,
 				mappings = {},
@@ -2264,9 +2677,8 @@ Equipments = {
 				equipment.isNew = true
 			end
 			table.insert( _equipments, equipment )
-			_indexEquipmentsById[ id ] = equipment
-			_indexFeaturesAndDevicesByIdAndFeatureName[ id ] = {}
 		end
+		-- TODO : control num
 		-- Update the device max number
 		if ( deviceNum > equipment.maxDeviceNum ) then
 			equipment.maxDeviceNum = deviceNum
@@ -2278,78 +2690,120 @@ Equipments = {
 			equipment.mainRoomId = deviceRoomId
 		end
 		-- Mapping
-		local _, mapping = _indexEquipmentsAndMappingsByDeviceId[ tostring( deviceId ) ]
+		local _, mapping = Equipments.getFromDeviceId( deviceId, true )
 		if ( mapping == nil ) then
 			-- Device not already mapped
 			mapping = {
+				endpointId = endpointId,
 				features = {},
 				device = device
 			}
 			table.insert( equipment.mappings, mapping )
-			_indexEquipmentsAndMappingsByDeviceId[ tostring( deviceId ) ] = { equipment, mapping }
 		end
 		-- Features
 		for _, featureName in ipairs( featureNames ) do
-			local feature, devices = unpack( _indexFeaturesAndDevicesByIdAndFeatureName[ id ][ featureName ] or {} )
+			local _, feature = Equipments.get( protocol, equipmentId, address, endpointId, featureName )
 			if ( feature == nil ) then
 				feature = {
 					name = featureName
 				}
-				_indexFeaturesAndDevicesByIdAndFeatureName[ id ][ featureName ] = { feature, {} }
 			end
 			mapping.features[featureName] = feature
-			table.insert( _indexFeaturesAndDevicesByIdAndFeatureName[ id ][ featureName ][ 2 ], device )
+		end
+		-- Add to indexes
+		Equipments.addToIndexes( equipment )
+	end,
+
+	clearIndexes = function()
+		_indexEquipmentsByProtocolEquipmentId = {}
+		_indexEquipmentsByProtocolAddress = {}
+		_indexEquipmentsAndMappingsByDeviceId = {}
+		_indexFeaturesAndDevicesByProtocolEquipmentIdAndFeatureEndpoint = {}
+	end,
+
+	addToIndexes = function( equipment )
+		local key = tostring(equipment.protocol) .. ";" .. tostring(equipment.id)
+		if ( _indexEquipmentsByProtocolEquipmentId[ key ] == nil ) then
+			_indexEquipmentsByProtocolEquipmentId[ key ] = equipment
+		end
+		if ( equipment.address and ( _indexEquipmentsByProtocolAddress[ tostring(equipment.protocol) .. ";" .. tostring(equipment.address) ] == nil ) ) then
+			_indexEquipmentsByProtocolAddress[ tostring(equipment.protocol) .. ";" .. tostring(equipment.address) ] = equipment
+		end
+		if ( _indexFeaturesAndDevicesByProtocolEquipmentIdAndFeatureEndpoint[ key ] == nil ) then
+			_indexFeaturesAndDevicesByProtocolEquipmentIdAndFeatureEndpoint[ key ] = {}
+		end
+		for _, mapping in ipairs( equipment.mappings ) do
+			if ( _indexEquipmentsAndMappingsByDeviceId[ tostring( mapping.device.id ) ] == nil ) then
+				for featureName, feature in pairs( mapping.features ) do
+					local _indexFeaturesAndDevicesFromIdAndFeatureByEndpoint = _indexFeaturesAndDevicesByProtocolEquipmentIdAndFeatureEndpoint[ key ][ featureName ]
+					if ( _indexFeaturesAndDevicesFromIdAndFeatureByEndpoint == nil ) then
+						_indexFeaturesAndDevicesByProtocolEquipmentIdAndFeatureEndpoint[ key ][ featureName ] = {}
+						_indexFeaturesAndDevicesFromIdAndFeatureByEndpoint = _indexFeaturesAndDevicesByProtocolEquipmentIdAndFeatureEndpoint[ key ][ featureName ]
+					end
+					local endpointId = string_isEmpty(mapping.endpointId) and "none" or mapping.endpointId
+					if ( _indexFeaturesAndDevicesFromIdAndFeatureByEndpoint[ endpointId ] == nil ) then
+						_indexFeaturesAndDevicesFromIdAndFeatureByEndpoint[ endpointId ] = { feature, {} }
+					end
+					table.insert( _indexFeaturesAndDevicesFromIdAndFeatureByEndpoint[ endpointId ][ 2 ], mapping.device )
+				end
+				_indexEquipmentsAndMappingsByDeviceId[ tostring( mapping.device.id ) ] = { equipment, mapping }
+			end
 		end
 	end,
 
-	get = function( protocol, equipmentId, featureName )
-		if ( ( protocol ~= nil ) and ( equipmentId ~= nil ) ) then
-			local id = tostring(protocol) .. ";" .. tostring(equipmentId)
-			local equipment = _indexEquipmentsById[ id ]
-			if ( equipment ~= nil ) then
-				if ( featureName ~= nil ) then
-					local feature, devices = unpack( _indexFeaturesAndDevicesByIdAndFeatureName[ id ][ featureName ] or {} )
+	get = function( protocol, equipmentId, address, endpointId, featureName )
+		if not string_isEmpty(protocol) then
+			local equipment
+			if not string_isEmpty(equipmentId) then
+				equipment = _indexEquipmentsByProtocolEquipmentId[ protocol .. ";" .. equipmentId ]
+			elseif not string_isEmpty(address) then
+				equipment = _indexEquipmentsByProtocolAddress[ protocol .. ";" .. address ]
+			end
+			if ( ( equipment ~= nil ) and featureName ) then
+				local key = tostring(protocol) .. ";" .. tostring(equipment.id)
+				local _indexFeaturesAndDevicesFromIdAndFeatureByEndpoint = _indexFeaturesAndDevicesByProtocolEquipmentIdAndFeatureEndpoint[ key ][ tostring(featureName) ]
+				if _indexFeaturesAndDevicesFromIdAndFeatureByEndpoint then
+					local feature, devices
+					if ( endpointId == "all" ) then
+						-- Used during broadcast
+						-- TODO : get all the endpoints and not just the first for this feature name
+						for endpointId, featureAndDevices in pairs(_indexFeaturesAndDevicesFromIdAndFeatureByEndpoint) do
+							feature, devices = unpack( featureAndDevices )
+							break
+						end
+					else
+						endpointId = string_isEmpty(endpointId) and "none" or endpointId
+						feature, devices = unpack( _indexFeaturesAndDevicesFromIdAndFeatureByEndpoint[ endpointId ] or {} )
+					end
 					if ( feature ~= nil ) then
 						return equipment, feature, devices
 					end
 				end
-				return equipment
 			end
-			return nil
+			return equipment
 		else
 			return _equipments
 		end
 	end,
 
-	getFromDeviceId = function( deviceId )
-		local index = _indexEquipmentsAndMappingsByDeviceId[ tostring( deviceId ) ]
-		if index then
-			return index[1], index[2].features, index[2].device
-		else
+	getFromDeviceId = function( deviceId, noWarningIfUnknown )
+		local equipment, mapping = unpack( _indexEquipmentsAndMappingsByDeviceId[ tostring( deviceId ) ] or {} )
+		if mapping then
+			return equipment, mapping
+		elseif ( noWarningIfUnknown ~= true ) then
 			warning( "Equipment with deviceId #" .. tostring( deviceId ) .. "' is unknown", "Equipments.getFromDeviceId" )
 		end
 		return nil
 	end,
 
-	log = function()
-		-- TODO : loguer tous les equipements
-		local nbEquipments = 0
-		local nbDevicesByFeature = {}
-		for _, equipment in pairs( _equipments ) do
-			nbEquipments = nbEquipments + 1
-			for _, mapping in ipairs( equipment.mappings ) do
-				for featureName, feature in pairs( mapping.features ) do
-					if (nbDevicesByFeature[featureName] == nil) then
-						nbDevicesByFeature[featureName] = 1
-					else
-						nbDevicesByFeature[featureName] = nbDevicesByFeature[featureName] + 1
-					end
-				end
-			end
-		end
-		log("* Equipments: " .. tostring(nbEquipments), "Equipments.log")
-		for featureName, nbDevices in pairs(nbDevicesByFeature) do
-			log("*" .. string_lpad(featureName, 20) .. ": " .. tostring(nbDevices), "Equipments.log")
+	changeAddress = function( equipment, newAddress )
+		local formerAddress = equipment.address
+		debug( "Change address of " .. Tools.getEquipmentSummary(equipment) .. " to " .. tostring(newAddress), "Equipments.changeAddress" )
+		equipment.address = tostring(newAddress)
+		_indexEquipmentsByProtocolAddress[ equipment.protocol .. ";" .. formerAddress ] = nil
+		_indexEquipmentsByProtocolAddress[ equipment.protocol .. ";" .. equipment.address ] = equipment
+		for _, mapping in ipairs( equipment.mappings ) do
+			Variable.set( mapping.device.id, "ADDRESS", equipment.address )
 		end
 	end
 }
@@ -2374,17 +2828,56 @@ Equipment = {
 	end,
 
 	setLoadLevel = function( equipment, loadLevel, parameters )
+		local loadLevel = tonumber(loadLevel) or 0
 		if ( equipment.protocol == "RTS" ) then
-			error( "RTS equipment does not support DIM", "Equipment.setLoadLevel" )
+			if ( loadLevel == 0 ) then
+				Equipment.setStatus( equipment, "0", parameters )
+			elseif ( loadLevel == 100 ) then
+				Equipment.setStatus( equipment, "1", parameters )
+			else
+				error( "RTS equipment does not support DIM", "Equipment.setLoadLevel" )
+				return false
+			end
+		else
+			parameters = parameters or {}
+			local qualifier = parameters.qualifier and ( " QUALIFIER " .. ( ( parameters.qualifier == "1" ) and "1" or "0" ) ) or ""
+			local burst = parameters.burst and ( " BURST " .. parameters.burst ) or ""
+			Network.send( "ZIA++DIM " .. equipment.protocol .. " ID " .. equipment.id .. " %" .. tostring(loadLevel) .. qualifier .. burst )
+		end
+	end,
+
+	setHVACFanOperatingMode = function( equipment, mode, parameters )
+		debug( "TODO", "Equipment.setHVACFanOperatingMode" )
+	end,
+
+	setHVACOperatingMode = function( equipment, mode, parameters )
+		if ( ( equipment.protocol == "X2DGAS" ) or ( equipment.protocol == "X2DELEC" ) ) then
+			local cmd = "OFF" -- ON ????
+			local OPERATING_MODE = {
+				Eco = "0", -- Reduced
+				CoolOn = "0", -- Reduced
+				Comfort2 = "1", -- Moderato
+				Comfort1 = "2", -- Medio
+				Comfort = "3", -- Comfort
+				HeatOn = "3", -- Comfort
+				Off = "4", -- Stop
+				OutOfFrost = "5", -- AntiFrost
+				Special = "6",
+				Auto = "7",
+				AutoChangeOver = "7",
+				Centralized = "8"
+			}
+			local param = OPERATING_MODE[mode] or "7"
+			Network.send( "ZIA++" .. cmd  .. " " .. equipment.protocol .. " ID " .. equipment.id .. " %" .. param )
+		else
+			error( equipment.protocol .. " equipment does not support HVAC operating mode", "Equipment.setHVACOperatingMode" )
 			return false
 		end
-		parameters = parameters or {}
-		local qualifier = parameters.qualifier and ( " QUALIFIER " .. ( ( parameters.qualifier == "1" ) and "1" or "0" ) ) or ""
-		local burst = parameters.burst and ( " BURST " .. parameters.burst ) or ""
-		Network.send( "ZIA++DIM " .. equipment.protocol .. " ID " .. equipment.id .. " %" .. tostring(loadLevel) .. qualifier .. burst )
-	end
+	end,
 
-	-- TODO : HVAC
+	setSetPoint = function( equipment, setPoint, parameters )
+		debug( "TODO", "Equipment.setSetPoint" )
+	end
 }
 
 -- **************************************************
@@ -2415,13 +2908,14 @@ SerialConnection = {
 			local ioDevice = tonumber(( Variable.get( DEVICE_ID, "IO_DEVICE" ) ))
 			if ioDevice then
 				-- Check serial settings
-				local baudRate = Variable.get( ioDevice, "BAUD" ) or "115200"
+				local baudRate = Variable.get( ioDevice, "BAUD" ) or "9600"
+				log( "Baud rate is " .. baudRate, "SerialConnection.isValid" )
 				if ( baudRate ~= _SERIAL.baudRate ) then
 					error( "Incorrect setup of the serial port. Select " .. _SERIAL.baudRate .. " bauds.", "SerialConnection.isValid", false )
 					UI.showError( "Select " .. _SERIAL.baudRate .. " bauds for the Serial Port" )
 					return false
 				end
-				log( "Baud rate is " .. _SERIAL.baudRate, "SerialConnection.isValid" )
+				
 
 				-- TODO : Check Parity none / Data bits 8 / Stop bit 1
 			end
@@ -2436,7 +2930,7 @@ SerialConnection = {
 -- HTTP request handler
 -- **************************************************
 
-local _handlerCommands = {
+local REQUEST_TYPE = {
 	["default"] = function( params, outputFormat )
 		return "Unknown command '" .. tostring( params["command"] ) .. "'", "text/plain"
 	end,
@@ -2447,28 +2941,28 @@ local _handlerCommands = {
 	end,
 
 	["getProtocolsInfos"] = function( params, outputFormat )
-		return tostring( json.encode( ZIBLUE_SEND_PROTOCOL ) ), "application/json"
+		return tostring( json.encode( VIRTUAL_EQUIPMENT ) ), "application/json"
 	end,
 
 	["getSettings"] = function( params, outputFormat )
-		return tostring( json.encode( _settings ) ), "application/json"
+		return tostring( json.encode( SETTINGS ) ), "application/json"
 	end,
 
 	["getErrors"] = function( params, outputFormat )
-		return tostring( json.encode( g_errors ) ), "application/json"
+		return tostring( json.encode( _errors ) ), "application/json"
 	end
 }
-setmetatable( _handlerCommands, {
+setmetatable( REQUEST_TYPE, {
 	__index = function( t, command, outputFormat )
 		log( "No handler for command '" ..  tostring(command) .. "'", "handler" )
-		return _handlerCommands["default"]
+		return REQUEST_TYPE["default"]
 	end
 })
 
-local function _handleCommand( lul_request, lul_parameters, lul_outputformat )
+local function _handleRequest( lul_request, lul_parameters, lul_outputformat )
 	local command = lul_parameters["command"] or "default"
-	debug( "Get handler for command '" .. tostring(command) .."'", "handleCommand" )
-	return _handlerCommands[command]( lul_parameters, lul_outputformat )
+	--debug( "Get handler for command '" .. tostring(command) .."'", "handleRequest" )
+	return REQUEST_TYPE[command]( lul_parameters, lul_outputformat )
 end
 
 
@@ -2477,61 +2971,17 @@ end
 -- **************************************************
 
 Child = {
-
-	setTarget = function( childDeviceId, newTargetValue )
-		if not Equipments.getFromDeviceId( childDeviceId ) then
-			error( "Device #" .. tostring( childDeviceId ) .. " is not linked to an equipment", "Child.setTarget" )
-			return JOB_STATUS.ERROR
+	doAction = function( actionName, childDeviceId, ... )
+		if ( type(Device[actionName]) ~= "function" ) then
+			error( "Unknown action '" .. tostring(actionName) .. "'", "Child.doAction" )
+			return false
 		end
-		Device.setStatus( childDeviceId, newTargetValue )
-		return JOB_STATUS.DONE
-	end,
-
-	setLoadLevelTarget = function( childDeviceId, newLoadlevelTarget )
 		if not Equipments.getFromDeviceId( childDeviceId ) then
-			error( "Device #" .. tostring( childDeviceId ) .. " is not linked to an equipment", "Child.setLoadLevelTarget" )
-			return JOB_STATUS.ERROR
+			error( "Device #" .. tostring( childDeviceId ) .. " is not linked to an equipment", "Device." .. tostring(actionName) )
+			return false
 		end
-		Device.setLoadLevel( childDeviceId, newLoadlevelTarget )
-		return JOB_STATUS.DONE
-	end,
-
-	setArmed = function( childDeviceId, newArmedValue )
-		if not Equipments.getFromDeviceId( childDeviceId ) then
-			error( "Device #" .. tostring( childDeviceId ) .. " is not linked to an equipment", "Child.setArmed" )
-			return JOB_STATUS.ERROR
-		end
-		Device.setArmed( childDeviceId, newArmedValue or "0" )
-		return JOB_STATUS.DONE
-	end,
-
-	moveShutter = function( childDeviceId, direction )
-		if not Equipments.getFromDeviceId( childDeviceId ) then
-			error( "Device #" .. tostring( childDeviceId ) .. " is not linked to an equipment", "Child.moveShutter" )
-			return JOB_STATUS.ERROR
-		end
-		Device.moveShutter( childDeviceId, direction )
-		return JOB_STATUS.DONE
-	end,
-
-	setModeStatus = function( childDeviceId, newModeStatus, option )
-		if not Equipments.getFromDeviceId( childDeviceId ) then
-			error( "Device #" .. tostring( childDeviceId ) .. " is not linked to an equipment", "Child.setModeStatus" )
-			return JOB_STATUS.ERROR
-		end
-		Device.setModeStatus( childDeviceId, newModeStatus, option )
-		return JOB_STATUS.DONE
-	end,
-
-	setSetPoint = function( childDeviceId, newSetpoint, option )
-		if not Equipments.getFromDeviceId( childDeviceId ) then
-			error( "Device #" .. tostring( childDeviceId ) .. " is linked to an equipment", "Child.setCurrentSetPoint" )
-			return JOB_STATUS.ERROR
-		end
-		Device.setSetPoint( childDeviceId, newSetpoint, option )
-		return JOB_STATUS.DONE
+		return Device[actionName]( childDeviceId, unpack(arg) )
 	end
-
 }
 
 
@@ -2542,50 +2992,57 @@ Child = {
 Main = {
 
 	startJob = function( method, ... )
-		local isOk = Tools.pcall( method, ... )
-		return isOk and JOB_STATUS.DONE or JOB_STATUS.ERROR
+		local isOk, result = Tools.pcall( method, ... )
+		debug( "isOk:" .. tostring(isOk) .. ", result:".. tostring(result), "Main.startJob" )
+		return ( isOk and ( result ~= false ) ) and JOB_STATUS.DONE or JOB_STATUS.ERROR
 	end,
 
 	refresh = function()
-		debug( "Refresh equipments", "refresh" )
+		debug( "Refresh equipments", "Main.refresh" )
 		Equipments.retrieve()
-		Equipments.log()
 	end,
 
-	-- Creates devices linked to equipements
+	-- Creates devices linked to equipments
 	createDevices = function( jsonMappings )
-		debug( "Create devices " .. tostring(jsonMappings), "createDevices" )
-		local hasBeenCreated = false
 		local decodeSuccess, mappings, _, jsonError = pcall( json.decode, string_decodeURI(jsonMappings) )
+		if ( decodeSuccess and mappings ) then
+			debug( "Create devices " .. json.encode(mappings), "Main.createDevices" )
+		else
+			error( "JSON error: " .. tostring( jsonError ), "Main.createDevices" )
+			return
+		end
+		local hasBeenCreated = false
 		local roomId = luup.devices[ DEVICE_ID ].room_num or 0
 		for _, mapping in ipairs( mappings ) do
-			local id = tostring(mapping.protocol) .. ";" .. tostring(mapping.equipmentId)
-			local msg = "Equipment '" .. id .. "'"
-
-			if string_isEmpty( mapping.deviceType ) then
-				debug( msg .. " - Mapping does not have a device type", "createDevices" )
+			if ( string_isEmpty( mapping.protocol ) or string_isEmpty( mapping.equipmentId ) or string_isEmpty( mapping.deviceType ) ) then
+				error( "'protocol', 'equipmentId' or 'deviceType' can not be empty in " .. json.encode(mapping), "Main.createDevices" )
 			else
+				local msg = "Equipment " .. Tools.getEquipmentInfo( mapping.protocol, mapping.equipmentId, mapping.address, mapping.endpointId, mapping.featureNames )
 				local deviceInfos = Device.getInfos( mapping.deviceType or "BINARY_LIGHT" )
 				if not deviceInfos then
-					error( msg .. " - Device infos are missing", "createDevices" )
+					error( msg .. " - Device infos are missing", "Main.createDevices" )
 				elseif not Device.fileExists( deviceInfos ) then
-					error( msg .. " - Definition file for device type '" .. deviceInfos.name .. "' is missing", "createDevices" )
+					error( msg .. " - Definition file for device type '" .. deviceInfos.name .. "' is missing", "Main.createDevices" )
 				else
-					-- Compute device number
+					-- Compute device number (critical)
 					local deviceNum = 1
 					local equipment = Equipments.get( mapping.protocol, mapping.equipmentId )
 					if equipment then
-						debug( msg .. " already exists", "createDevices" )
+						debug( msg .. " already exists", "Main.createDevices" )
 						deviceNum = equipment.maxDeviceNum + 1
 					end
 					-- Device name
-					local deviceName = mapping.deviceName or ( mapping.protocol .. " " .. mapping.equipmentId .. "/" .. tostring(deviceNum) )
+					local deviceName = mapping.deviceName or ( mapping.protocol .. "-" .. mapping.equipmentId .. "/" .. tostring(deviceNum) )
 					-- Device parameters
 					local parameters = Device.getEncodedParameters( deviceInfos )
+					parameters = parameters .. Variable.getEncodedValue( "ADDRESS", mapping.address ) .. "\n"
+					parameters = parameters .. Variable.getEncodedValue( "ENDPOINT", mapping.endpointId ) .. "\n"
 					parameters = parameters .. Variable.getEncodedValue( "FEATURE", table.concat( mapping.featureNames or {}, "," ) ) .. "\n"
-					parameters = parameters .. Variable.getEncodedValue( "ASSOCIATION", "" ) .. "=\n"
-					--parameters = parameters .. Variable.getEncodedValue( "SETTING", table.concat( table_append( settings, mapping.settings or {}, true ), "," ) ) .. "\n"
+					parameters = parameters .. Variable.getEncodedValue( "ASSOCIATION", "" ) .. "\n"
 					parameters = parameters .. Variable.getEncodedValue( "SETTING", table.concat( mapping.settings or {}, "," ) ) .. "\n"
+					if deviceInfos.json then
+						parameters = parameters .. ",device_json=" .. tostring(deviceInfos.json) .. "\n"
+					end
 					if deviceInfos.category then
 						parameters = parameters .. ",category_num=" .. tostring(deviceInfos.category) .. "\n"
 					end
@@ -2598,11 +3055,11 @@ Main = {
 					end
 					--]]
 					-- Add new device in the home automation controller
-					local internalId = id .. ";" .. tostring(deviceNum)
-					debug( msg .. " - Add device '" .. internalId .. "', type '" .. deviceInfos.name .. "', file '" .. deviceInfos.file .. "'", "createDevices" )
+					local internalId = mapping.protocol .. ";" .. mapping.equipmentId .. ";" .. tostring(deviceNum)
+					debug( msg .. " - Add device '" .. internalId .. "', type '" .. deviceInfos.name .. "', file '" .. deviceInfos.file .. "'", "Main.createDevices" )
 					local newDeviceId = luup.create_device(
 						'', -- device_type
-						internalId,
+						internalId, -- critical !!! MUST BE UNIQUE
 						deviceName,
 						deviceInfos.file,
 						'', -- upnp_impl
@@ -2620,12 +3077,11 @@ Main = {
 						false, -- reload
 						false -- nodupid
 					)
-					debug( msg .. " - Device #" .. tostring(newDeviceId) .. "(" .. deviceName .. ") has been created", "createDevices" )
+					debug( msg .. " - Device #" .. tostring(newDeviceId) .. "(" .. deviceName .. ") has been created", "Main.createDevices" )
 					hasBeenCreated = true
 
 					-- Add or update linked equipment
-					--Equipments.add( mapping.protocol, mapping.equipmentId, featureNames, deviceNum, deviceType, newDeviceId, roomId, nil, nil, true )
-					Equipments.add( mapping.protocol, mapping.equipmentId, mapping.featureNames, deviceNum, nil, newDeviceId, roomId, nil, nil, true )
+					Equipments.add( mapping.protocol, mapping.equipmentId, mapping.address, mapping.endpointId, mapping.featureNames or {}, deviceNum, nil, newDeviceId, roomId, nil, nil, true )
 					-- Remove from discovered equipments
 					DiscoveredEquipments.remove( mapping.protocol, mapping.equipmentId )
 				end
@@ -2634,60 +3090,83 @@ Main = {
 
 		if hasBeenCreated then
 			Equipments.retrieve()
-			Equipments.log()
 			Variable.set( DEVICE_ID, "LAST_UPDATE", os.time() )
 		end
 
 	end,
 
-	-- Teach a receiver (or Parrot). This is done on an unknown device (it wil be created)
-	teachIn = function( productId, action, comment )
-		local protocol, equipmentId = unpack( string_split( productId, ";" ) )
+	-- Teach a receiver (or Parrot). This is done on an unknown device (it will be created)
+	teachIn = function( protocol, equipmentId, settings, action, comment )
 		equipmentId = tonumber(equipmentId)
 		if ( ( protocol == nil ) or ( equipmentId == nil ) ) then
-			error( "Protocol and equipment id are mandatory", "teachIn" )
+			error( "Protocol and equipment id are mandatory", "Main.teachIn" )
 			return JOB_STATUS.ERROR
 		end
+		settings = Tools.getSettings( string_decodeURI( settings ) )
 		if ( protocol == "PARROT" ) then
 			-- PARROTLEARN
 			if ( ( equipmentId < 0 ) or ( equipmentId > 239 ) ) then
-				error( "Id of the Parrot device " .. tostring(equipmentId) .. " is not between 0 and 239", "teachIn" )
+				error( "Id of the Parrot device " .. tostring(equipmentId) .. " is not between 0 and 239", "Main.teachIn" )
 				return JOB_STATUS.ERROR, nil
 			end
 			action = ( action == "OFF" ) and "OFF" or "ON"
-			debug( "Start Parrot learning for #" .. tostring(equipmentId) .. ", action " .. action .. " and reminder '" .. tostring(comment) .. "'", "teachIn" )
+			debug( "Start Parrot learning for #" .. tostring(equipmentId) .. ", action " .. action .. " and reminder '" .. tostring(comment) .. "'", "Main.teachIn" )
 			Network.send( "ZIA++PARROTLEARN ID " .. tostring(equipmentId) .. " " .. action .. ( comment and ( " [" .. tostring(comment) .. "]" ) or "" ) )
+		elseif ( protocol == "EDISIO" ) then
+			
 		else
 			if ( ( equipmentId < 0 ) or ( equipmentId > 255 ) ) then
-				error( "Id of the device " .. tostring(equipmentId) .. " is not between 0 and 255", "teachIn" )
+				error( "Id of the device " .. tostring(equipmentId) .. " is not between 0 and 255", "Main.teachIn" )
 				return JOB_STATUS.ERROR, nil
 			end
-			debug( "Teach in " .. productId, "teachIn" )
-			Network.send( "ZIA++ASSOC " .. protocol .. " ID " .. tostring(equipmentId) )
+			debug( "Teach in " .. protocol .. ";" .. equipmentId .. " with " .. json.encode(settings), "Main.teachIn" )
+			Network.send( "ZIA++ASSOC ID " .. tostring(equipmentId) .. " " .. protocol .. ( settings.qualifier and ( " QUALIFIER " .. tostring(settings.qualifier) ) or "" ) )
 		end
 	end,
 
-	setTarget = function( productId, newTargetValue )
-		local protocol, equipmentId, qualifier = unpack( string_split( productId, ";" ) )
+	setTarget = function( protocol, equipmentId, settings, newTargetValue )
 		if ( ( protocol == nil ) or ( equipmentId == nil ) ) then
-			error( "Protocol and equipment id are mandatory", "setTarget" )
+			error( "Protocol and equipment id are mandatory", "Main.setTarget" )
 			return JOB_STATUS.ERROR
 		end
+		settings = Tools.getSettings( string_decodeURI( settings ) )
 		local cmd = ( newTargetValue == "1" ) and "ON" or "OFF"
-		debug( "Set " .. cmd .. " " .. productId, "setTarget" )
-		Network.send( "ZIA++" .. cmd .. " ID " .. tostring(equipmentId) .. " " .. tostring(protocol) .. ( qualifier and ( " QUALIFIER " .. tostring(qualifier) ) or "" ) )
+		debug( "Set " .. cmd .. " for " .. protocol .. ";" .. equipmentId .. " with " .. json.encode(settings), "Main.setTarget" )
+		Network.send( "ZIA++" .. cmd .. " ID " .. tostring(equipmentId) .. " " .. tostring(protocol) .. ( settings.qualifier and ( " QUALIFIER " .. tostring(settings.qualifier) ) or "" ) )
+	end,
+
+	setParam = function( paramName, paramValue )
+		debug( "Set param '" .. tostring(paramName) .. "' to '" .. tostring(paramValue) .. "'", "Main.setParam" )
+		local hasBeenSet = true
+		if ( paramName == "system.jamming" ) then
+			Network.send( "ZIA++JAMMING " .. tostring(paramValue) )
+		elseif ( paramName == "radiolow.frequency" ) then
+			Network.send( "ZIA++FREQ L " .. tostring(paramValue) )
+		elseif ( paramName == "radiolow.selectivity" ) then
+			Network.send( "ZIA++SELECTIVITY L " .. tostring(paramValue) )
+		elseif ( paramName == "radiohigh.frequency" ) then
+			Network.send( "ZIA++FREQ H " .. tostring(paramValue) )
+		elseif ( paramName == "radiohigh.selectivity" ) then
+			Network.send( "ZIA++SELECTIVITY H " .. tostring(paramValue) )
+		else
+			hasBeenSet = false
+		end
+		if hasBeenSet then
+			Network.send( "WAIT" )
+			Network.send( "ZIA++STATUS SYSTEM JSON" )
+		end
 	end,
 
 	-- Simulate a jamming
 	simulateJamming = function( delay )
 		local delay = tostring(delay or 5)
-		debug( "Simulate jamming during " .. delay .. " seconds", "simulateJamming")
+		debug( "Simulate jamming during " .. delay .. " seconds", "Main.simulateJamming")
 		Network.send( "ZIA++JAMMING SIMULATE " .. delay )
 	end,
 
 	-- DEBUG METHOD
 	sendMessage = function( message )
-		debug( "Send message: " .. tostring(message), "sendMessage" )
+		debug( "Send message: " .. tostring(message), "Main.sendMessage" )
 		Network.send( message )
 	end
 
@@ -2757,9 +3236,7 @@ function init( lul_device )
 		UI.showError( "No JSON decoder" )
 	elseif SerialConnection.isValid() then
 		-- Get the list of the child devices
-		math.randomseed( os.time() )
 		Equipments.retrieve()
-		Equipments.log()
 
 		-- Open the connection with the RFP1000
 		Network.send( "ZIA++HELLO" )
@@ -2771,32 +3248,36 @@ function init( lul_device )
 		--Network.send( "WAIT" )
 		Network.send( "ZIA++STATUS PARROT JSON" )
 
+		--Network.send( "ZIA++EDISIOFRAME" )
+
 		-- Start polling engine
 		PollEngine.start()
-	end
 
-	-- Watch setting changes
-	Variable.watch( DEVICE_ID, VARIABLE.DEBUG_MODE, _NAME .. ".initPluginInstance" )
+		-- Watch setting changes
+		Variable.watch( DEVICE_ID, VARIABLE.DEBUG_MODE, _NAME .. ".initPluginInstance" )
 
-	-- HTTP Handlers
-	log( "Register handler " .. _NAME, "init" )
-	luup.register_handler( _NAME .. ".handleCommand", _NAME )
+		-- HTTP requests handler
+		log( "Register handler " .. _NAME, "init" )
+		luup.register_handler( _NAME .. ".handleRequest", _NAME )
 
-	-- Register with ALTUI
-	luup.call_delay( _NAME .. ".registerWithALTUI", 10 )
+		-- Register with ALTUI
+		luup.call_delay( _NAME .. ".registerWithALTUI", 10 )
 
-	if ( luup.version_major >= 7 ) then
+		log( "Startup successful", "init" )
 		luup.set_failure( 0, DEVICE_ID )
+		return true, "Startup successful", _NAME
 	end
 
-	log( "Startup successful", "init" )
-	return true, "Startup successful", _NAME
+	luup.set_failure( 1, DEVICE_ID )
+	return false, "Startup failed", _NAME
 end
 
 
 -- Promote the functions used by Vera's luup.xxx functions to the global name space
-_G[_NAME .. ".handleCommand"] = _handleCommand
-_G[_NAME .. ".Command.deferredProcess"] = Command.deferredProcess
+_G[_NAME .. ".handleRequest"] = _handleRequest
+_G[_NAME .. ".Commands.deferredProcess"] = Commands.deferredProcess
+_G[_NAME .. ".Device.setStatusAfterTimeout"] = Device.setStatusAfterTimeout
+_G[_NAME .. ".Device.setTrippedAfterTimeout"] = Device.setTrippedAfterTimeout
 _G[_NAME .. ".Network.send"] = Network.send
 _G[_NAME .. ".Network.flush"] = Network.flush
 _G[_NAME .. ".PollEngine.poll"] = PollEngine.poll
