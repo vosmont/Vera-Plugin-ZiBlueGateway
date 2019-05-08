@@ -24,7 +24,7 @@ local hasBit, bit = pcall( require , "bit" )
 
 _NAME = "ZiBlueGateway"
 _DESCRIPTION = "ZiBlue gateway for the Vera"
-_VERSION = "1.3.7"
+_VERSION = "1.3.8"
 _AUTHOR = "vosmont"
 
 -- **************************************************
@@ -52,19 +52,27 @@ function log( msg, methodName, lvl )
 	luup.log( string_rpad( methodName, 45 ) .. " " .. tostring( msg ), lvl )
 end
 
-local debugMode = false
+local _debugMode = false
 local function debug() end
 
-local function warning( msg, methodName )
-	log( msg, methodName, 2 )
-end
-
 local _errors = {}
-local function error( msg, methodName, notifyOnUI )
+local function _addError( msg, methodName )
 	table.insert( _errors, { os.time(), methodName or "", tostring( msg ) } )
 	if ( #_errors > 100 ) then
 		table.remove( _errors, 1 )
 	end
+end
+
+local function warning( msg, methodName )
+	if _debugMode then
+		_addError( msg, methodName )
+	end
+	log( msg, methodName, 2 )
+end
+
+
+local function error( msg, methodName, notifyOnUI )
+	_addError( msg, methodName )
 	log( msg, methodName, 1 )
 	if ( notifyOnUI ~= false ) then
 		UI.showError( "Error (see tab)" )
@@ -128,8 +136,6 @@ local VARIABLE = {
 	HVAC_CURRENT_SETPOINT = { "urn:upnp-org:serviceId:TemperatureSetpoint1", "CurrentSetpoint", true },
 	HVAC_CURRENT_SETPOINT_HEAT = { "urn:upnp-org:serviceId:TemperatureSetpoint1_Heat", "CurrentSetpoint", true },
 	HVAC_CURRENT_SETPOINT_COOL = { "urn:upnp-org:serviceId:TemperatureSetpoint1_Cool", "CurrentSetpoint", true },
-	-- Pilot Wire (Antor)
-	PILOTWIRE_STATUS = { "urn:antor-fr:serviceId:PilotWire1", "Status", true },
 	-- IO connection
 	IO_DEVICE = { "urn:micasaverde-com:serviceId:HaDevice1", "IODevice", true },
 	IO_PORT_PATH = { "urn:micasaverde-com:serviceId:HaDevice1", "IOPortPath", true },
@@ -1905,7 +1911,6 @@ Commands = {
 		local devices, cmd = unpack( _commandsToProcess[1] )
 		for _, device in pairs( devices ) do
 			local msg = "Device #" .. tostring(device.id)
-			--local deviceInfos = Device.getInfos( device.id )
 			local deviceInfos = Device.getInfos( device.typeName )
 			if ( deviceInfos == nil ) then
 				error( msg .. " - Type is unknown", "Commands.protectedProcess" )
@@ -1961,7 +1966,7 @@ Network = {
 					-- JSON
 					local decodeSuccess, data, _, jsonError = pcall( json.decode, data )
 					if ( decodeSuccess and data ) then
-						debug( "<-- " .. source .. " " .. qualifier .. ": " .. json.encode( data ), "Network.receive" )
+						debug( "+-> RCV: " .. source .. qualifier .. " " .. json.encode( data ), "Network.receive" )
 						if data.systemStatus then
 							SETTINGS.system = Tools.extractInfos( data.systemStatus.info, "system" )
 							-- Special feature : JAMMING
@@ -1981,28 +1986,29 @@ Network = {
 							Commands.process()
 						end
 					else
-						error( "<-- JSON error: " .. tostring( jsonError ), "Network.receive" )
+						error( "JSON error: " .. tostring( jsonError ), "Network.receive" )
 					end
 				elseif ( qualifier == "66" ) then
 					-- EDISIOFRAME
 					-- TODO
 					data = string.sub( data, 14 )
-					debug( "<-- Edisio frame: '" .. tostring( data ) .. "'", "Network.receive" )
+					debug( "+-> RCV(Edisio): '" .. tostring( data ) .. "'", "Network.receive" )
 				else
 					if ( data == "PONG" ) then
+						-- TODO: manage no response (with timer)
 						debug( _NAME .. " is alive", "Network.receive" )
 					elseif ( string.sub( data, 1, 7 ) == "Welcome" ) then
 						debug( "Welcome: " .. data, "Network.receive" )
 					else
-						error( "<-- Unknown message: " .. qualifier .. "'" .. tostring( data ) .. "'", "Network.receive" )
+						error( "Unknown message: " .. qualifier .. "'" .. tostring( data ) .. "'", "Network.receive" )
 					end
 				end
 
 			else
 				if ( lul_data == "Port already in use" ) then
-					error( "<-- Port already in use", "Network.receive" )
+					error( "Port already in use", "Network.receive" )
 				else
-					debug( "<-- Unknown data: " .. string_toHex( lul_data ), "Network.receive" )
+					warning( "Unknown data: " .. string_toHex( lul_data ), "Network.receive" )
 				end
 			end
 		end
@@ -2016,11 +2022,11 @@ Network = {
 		local equipmentId = frameInfos.id or frameInfos.adr_channel
 		if string_isEmpty(equipmentId) then
 			warning( "equipmentId can not be empty", "Network.processFrame" )
-			return true
+			return (not _debugMode)
 		end
 		if ( ( protocol ~= "JAMMING" ) and ( protocol ~= "PARROT" ) and ( tonumber(equipmentId) == 0 ) ) then
 			warning( "equipmentId has to be greater than 0", "Network.processFrame" )
-			return true
+			return (not _debugMode)
 		end
 		local infos = {
 			infoType = frameHeader.infoType,
@@ -2029,7 +2035,7 @@ Network = {
 			quality = tonumber( frameHeader.rfQuality )
 		}
 		local endpointId
-		local isOk = true
+		local isOk, hasBeenProcessed = true, false
 
 		if frameInfos.area then
 			endpointId = string_lpad( frameInfos.area or "01", 2, "0" )
@@ -2038,10 +2044,10 @@ Network = {
 		if ( protocol == "EDISIO" ) then
 			equipmentId = string_toHex( number_toBytes( tonumber(equipmentId), "little", false ) )
 			endpointId = string_lpad( frameInfos.qualifier or "01", 2, "0" ) -- Edisio channel
-			debug( "modelId : " .. frameInfos.info, "Network.processFrame" )
+			--debug( "| modelId : " .. frameInfos.info, "Network.processFrame" )
 			local info = tonumber(frameInfos.info) or 0
 			infos.modelId = bit.band( info, 0xFF )
-			debug( "modelId : " .. number_toHex( infos.modelId ), "Network.process" )
+			--debug( "| modelId : " .. number_toHex( infos.modelId ), "Network.process" )
 			if ( frameInfos.subTypeMeaning == "SET_TEMPERATURE" ) then
 				frameInfos.measures = {
 					{
@@ -2054,28 +2060,32 @@ Network = {
 			end
 			--  3.6V is 100%, 2.6V is 0%
 			local batteryLevel = math.ceil((math.floor(info / 254) - 26) * 10)
-			debug( "batteryLevel : " .. number_toHex( batteryLevel ), "Network.process" )
+			debug( "| batteryLevel : " .. number_toHex( batteryLevel ), "Network.receive" )
 			isOk = Commands.add( protocol, equipmentId, nil, endpointId, infos, { name = "battery", data = batteryLevel, unit = "%" } ) and isOk
 		end
 
+		debug( "| (protocol:" .. tostring(protocol) .. "),(equipmentId:" .. tostring(equipmentId) .. "),(endpointId:" .. tostring(endpointId) .. "),(infos:" .. json.encode( infos ) .. ")", "Network.receive" )
 		local equipInfos = _getEquipmentInfos( protocol, infos.infoType, infos.subType, infos.modelId )
 		infos.capability = { name = equipInfos.name, modelings = equipInfos.modelings }
-		debug( "capability : " .. json.encode( infos.capability ), "Network.process" )
+		--debug( "| (capability:" .. json.encode( infos.capability ) .. ")", "Network.receive" )
 
 		-- Battery
 		if ( frameInfos.lowBatt == "1" ) then
 			isOk = Commands.add( protocol, equipmentId, nil, endpointId, infos, { name = "battery", data = 10, unit = "%" } ) and isOk
+			hasBeenProcessed = true
 		end
 
 		-- State (or model name)
 		if ( frameInfos.subTypeMeaning ) then
 			isOk = Commands.add( protocol, equipmentId, nil, endpointId, infos, { name = "state", data = frameInfos.subTypeMeaning } ) and isOk
+			hasBeenProcessed = true
 		end
 
 		-- Function (specific to X2DELEC and X2DGAS)
 		if ( frameInfos.functionMeaning and frameInfos.stateMeaning ) then
 			infos.modelName = frameInfos.subTypeMeaning
 			isOk = Commands.add( protocol, equipmentId, nil, endpointId, infos, { name = frameInfos.functionMeaning, data = frameInfos.stateMeaning } ) and isOk
+			hasBeenProcessed = true
 		end
 
 		-- Measures
@@ -2083,6 +2093,7 @@ Network = {
 			for _, measure in ipairs( frameInfos.measures ) do
 				if _isMeasureValid( measure ) then
 					isOk = Commands.add( protocol, equipmentId, nil, endpointId, infos, { name = measure.type, data = measure.value, unit = measure.unit } ) and isOk
+					hasBeenProcessed = true
 				end
 			end
 		end
@@ -2096,6 +2107,11 @@ Network = {
 					isOk = Commands.add( protocol, equipmentId, nil, endpointId, infos, { name = flag } ) and isOk
 				end
 			end
+			hasBeenProcessed = true
+		end
+
+		if not hasBeenProcessed then
+			warning( "Unknown: (source" .. source  .. "),(qualifier" .. qualifier  .. "),(data:" .. json.encode( data ) .. ")", "Network.receive" )
 		end
 
 		return isOk
@@ -2146,7 +2162,7 @@ Network = {
 				return
 			else
 				--debug( "Send message: ".. string.formatToHex(_messageToSendQueue[1]), "Network.send" )
-				debug( "--> " .. message, "Network.send" )
+				debug( "<-- SND: " .. message, "Network.send" )
 				_lastNetworkSendTime = os.time()
 				if not luup.io.write( message ) then
 					error( "Failed to send packet", "Network.send" )
@@ -2277,7 +2293,7 @@ Tools = {
 				table.insert( result )
 			end
 		end
-		debug( "Result:" .. json.encode( result ), "Tools.extractInfos" )
+		--debug( "Result:" .. json.encode( result ), "Tools.extractInfos" )
 		return result
 	end,
 
@@ -2993,7 +3009,6 @@ Main = {
 
 	startJob = function( method, ... )
 		local isOk, result = Tools.pcall( method, ... )
-		debug( "isOk:" .. tostring(isOk) .. ", result:".. tostring(result), "Main.startJob" )
 		return ( isOk and ( result ~= false ) ) and JOB_STATUS.DONE or JOB_STATUS.ERROR
 	end,
 
@@ -3182,8 +3197,8 @@ local function _initPluginInstance()
 	log( "Init", "initPluginInstance" )
 
 	-- Update the Debug Mode
-	debugMode = ( Variable.getOrInit( DEVICE_ID, "DEBUG_MODE", "0" ) == "1" ) and true or false
-	if debugMode then
+	_debugMode = ( Variable.getOrInit( DEVICE_ID, "DEBUG_MODE", "0" ) == "1" ) and true or false
+	if _debugMode then
 		log( "DebugMode is enabled", "init" )
 		debug = log
 	else
