@@ -1,3 +1,6 @@
+**This plugin is no longer maintained**
+
+
 # <img align="left" src="media/ziblue_gateway_logo.png"> Vera-Plugin-ZiBlueGateway
 <br/>
 
